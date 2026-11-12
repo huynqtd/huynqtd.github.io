@@ -1,13 +1,277 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="vi">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Danh bạ nhân sự – QLDN2</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Danh bạ nhân sự – QLDN2</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+  <div id="root"></div>
+
+  <script>
+    const { useState, useEffect, useMemo } = React;
+
+    // ====== CẤU HÌNH SHEET ======
+    const SHEET_ID = "1wH_rQwpF2jRO_8s277hq_kmuN-i79JMzKqNx43XAK0Y";
+    const SHEET_GID = "557275852"; // tab QLDN2
+    const SHEET_CSV_URL =
+      `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
+
+    // ====== TIỆN ÍCH ======
+    const formatDate = (iso) => {
+      if (!iso) return "—";
+      if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+        const [y, m, d] = iso.split("-");
+        return `${d}/${m}/${y}`;
+      }
+      return iso;
+    };
+
+    // ====== HOOK ĐỌC DỮ LIỆU ======
+    function useNhanSuData() {
+      const [data, setData] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+
+      useEffect(() => {
+        let cancelled = false;
+        fetch(SHEET_CSV_URL)
+          .then((res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status} – không tải được sheet`);
+            return res.text();
+          })
+          .then((csv) => {
+            if (cancelled) return;
+            if (csv.trim().startsWith("<")) {
+              throw new Error("Sheet chưa public. Share → Anyone with the link → Viewer.");
+            }
+            const { data: rows } = Papa.parse(csv, { header: true, skipEmptyLines: true });
+            const cleaned = rows
+              .map((r) => {
+                const o = {};
+                Object.keys(r).forEach((k) => {
+                  o[k.trim()] = (r[k] ?? "").toString().trim();
+                });
+                return o;
+              })
+              .filter((r) => r.id || r.hoTen);
+            if (cleaned.length === 0) {
+              throw new Error("Không có dòng dữ liệu. Kiểm tra tên cột hoặc gid.");
+            }
+            setData(cleaned);
+          })
+          .catch((e) => !cancelled && setError(e))
+          .finally(() => !cancelled && setLoading(false));
+        return () => { cancelled = true; };
+      }, []);
+
+      return { data, loading, error };
+    }
+
+    // ====== COMPONENT CARD ======
+    function CardView({ data }) {
+      return React.createElement(
+        "div",
+        { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" },
+        data.map((n) =>
+          React.createElement(
+            "div",
+            {
+              key: n.id || n.hoTen,
+              className: "bg-white rounded-xl shadow-sm hover:shadow-md transition p-4 flex gap-4",
+            },
+            React.createElement("img", {
+              src: n.avatar || "https://via.placeholder.com/80",
+              alt: n.hoTen,
+              className: "w-20 h-20 rounded-full object-cover border-2 border-blue-100 shrink-0",
+              onError: (e) => { e.currentTarget.src = "https://via.placeholder.com/80"; },
+            }),
+            React.createElement(
+              "div",
+              { className: "flex-1 min-w-0" },
+              React.createElement("h3", { className: "font-semibold text-gray-800 truncate" }, n.hoTen || "—"),
+              React.createElement("p", { className: "text-sm text-blue-600 font-medium" }, n.chucVu || "—"),
+              React.createElement("p", { className: "text-xs text-gray-500 mt-1" }, n.donVi || "—"),
+              React.createElement("p", { className: "text-xs text-gray-500" }, n.toNghiepVu || "—"),
+              React.createElement(
+                "div",
+                { className: "mt-2 text-xs text-gray-600 space-y-0.5" },
+                React.createElement("p", null, "📞 " + (n.soDienThoai || "—")),
+                React.createElement("p", null, "☎️ " + (n.phone_cq || "—")),
+                React.createElement("p", null, "🎂 " + formatDate(n.ngaySinh))
+              )
+            )
+          )
+        )
+      );
+    }
+
+    // ====== COMPONENT TABLE ======
+    function TableView({ data }) {
+      return React.createElement(
+        "div",
+        { className: "bg-white rounded-xl shadow-sm overflow-x-auto" },
+        React.createElement(
+          "table",
+          { className: "w-full text-sm" },
+          React.createElement(
+            "thead",
+            { className: "bg-gray-50 text-gray-600 uppercase text-xs" },
+            React.createElement(
+              "tr",
+              null,
+              ["Nhân sự", "Chức vụ", "Đơn vị", "Tổ nghiệp vụ", "SĐT", "SĐT CQ", "Ngày sinh"].map((h) =>
+                React.createElement("th", { key: h, className: "px-4 py-3 text-left" }, h)
+              )
+            )
+          ),
+          React.createElement(
+            "tbody",
+            { className: "divide-y divide-gray-100" },
+            data.map((n) =>
+              React.createElement(
+                "tr",
+                { key: n.id || n.hoTen, className: "hover:bg-gray-50" },
+                React.createElement(
+                  "td",
+                  { className: "px-4 py-3" },
+                  React.createElement(
+                    "div",
+                    { className: "flex items-center gap-3" },
+                    React.createElement("img", {
+                      src: n.avatar || "https://via.placeholder.com/40",
+                      alt: n.hoTen,
+                      className: "w-9 h-9 rounded-full object-cover",
+                      onError: (e) => { e.currentTarget.src = "https://via.placeholder.com/40"; },
+                    }),
+                    React.createElement("span", { className: "font-medium text-gray-800 whitespace-nowrap" }, n.hoTen || "—")
+                  )
+                ),
+                React.createElement("td", { className: "px-4 py-3 text-gray-700" }, n.chucVu || "—"),
+                React.createElement("td", { className: "px-4 py-3 text-gray-700" }, n.donVi || "—"),
+                React.createElement("td", { className: "px-4 py-3 text-gray-700" }, n.toNghiepVu || "—"),
+                React.createElement("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, n.soDienThoai || "—"),
+                React.createElement("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, n.phone_cq || "—"),
+                React.createElement("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, formatDate(n.ngaySinh))
+              )
+            )
+          )
+        )
+      );
+    }
+
+    // ====== COMPONENT CHÍNH ======
+    function App() {
+      const { data, loading, error } = useNhanSuData();
+      const [keyword, setKeyword] = useState("");
+      const [donViFilter, setDonViFilter] = useState("");
+      const [viewMode, setViewMode] = useState("card");
+
+      const danhSachDonVi = useMemo(
+        () => [...new Set(data.map((n) => n.donVi).filter(Boolean))],
+        [data]
+      );
+
+      const filtered = useMemo(() => {
+        const kw = keyword.toLowerCase();
+        return data.filter((n) => {
+          const matchKeyword =
+            (n.hoTen || "").toLowerCase().includes(kw) ||
+            (n.chucVu || "").toLowerCase().includes(kw) ||
+            (n.soDienThoai || "").includes(keyword);
+          const matchDonVi = donViFilter ? n.donVi === donViFilter : true;
+          return matchKeyword && matchDonVi;
+        });
+      }, [data, keyword, donViFilter]);
+
+      if (loading) {
+        return React.createElement(
+          "div",
+          { className: "min-h-screen flex items-center justify-center text-gray-500" },
+          "Đang tải dữ liệu từ Google Sheet..."
+        );
+      }
+
+      if (error) {
+        return React.createElement(
+          "div",
+          { className: "min-h-screen flex items-center justify-center p-4" },
+          React.createElement(
+            "div",
+            { className: "bg-red-50 border border-red-200 text-red-700 rounded-lg p-6 max-w-lg" },
+            React.createElement("p", { className: "font-semibold mb-1" }, "Không tải được dữ liệu"),
+            React.createElement("p", { className: "text-sm" }, error.message)
+          )
+        );
+      }
+
+      return React.createElement(
+        "div",
+        { className: "min-h-screen p-6" },
+        React.createElement(
+          "div",
+          { className: "max-w-6xl mx-auto" },
+          React.createElement("h1", { className: "text-2xl font-bold text-gray-800 mb-1" }, "Danh bạ nhân sự – QLDN2"),
+          React.createElement("p", { className: "text-sm text-gray-500 mb-4" }, `Tổng: ${filtered.length} / ${data.length} nhân sự`),
+
+          // Toolbar
+          React.createElement(
+            "div",
+            { className: "flex flex-col md:flex-row gap-3 mb-6" },
+            React.createElement("input", {
+              type: "text",
+              placeholder: "Tìm theo tên, chức vụ, SĐT...",
+              value: keyword,
+              onChange: (e) => setKeyword(e.target.value),
+              className: "flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400",
+            }),
+            React.createElement(
+              "select",
+              {
+                value: donViFilter,
+                onChange: (e) => setDonViFilter(e.target.value),
+                className: "px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400",
+              },
+              React.createElement("option", { value: "" }, "Tất cả đơn vị"),
+              danhSachDonVi.map((dv) => React.createElement("option", { key: dv, value: dv }, dv))
+            ),
+            React.createElement(
+              "div",
+              { className: "flex rounded-lg overflow-hidden border border-gray-300" },
+              React.createElement(
+                "button",
+                {
+                  onClick: () => setViewMode("card"),
+                  className: `px-4 py-2 text-sm ${viewMode === "card" ? "bg-blue-600 text-white" : "bg-white text-gray-700"}`,
+                },
+                "Thẻ"
+              ),
+              React.createElement(
+                "button",
+                {
+                  onClick: () => setViewMode("table"),
+                  className: `px-4 py-2 text-sm ${viewMode === "table" ? "bg-blue-600 text-white" : "bg-white text-gray-700"}`,
+                },
+                "Bảng"
+              )
+            )
+          ),
+
+          // Nội dung
+          filtered.length === 0
+            ? React.createElement("div", { className: "text-center text-gray-500 py-12" }, "Không tìm thấy nhân sự phù hợp.")
+            : viewMode === "card"
+            ? React.createElement(CardView, { data: filtered })
+            : React.createElement(TableView, { data: filtered })
+        )
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+  </script>
+</body>
 </html>
