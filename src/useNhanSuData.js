@@ -4,20 +4,12 @@ import Papa from "papaparse";
 
 /**
  * Google Sheet: "DanhbanganhThue"
- * Tab dữ liệu: "QLDN2"
- *
- * Cách lấy gid của tab QLDN2:
- *  1. Mở sheet trên trình duyệt
- *  2. Click vào tab "QLDN2"
- *  3. Nhìn URL có dạng: .../edit#gid=123456789
- *  4. Copy số 123456789 vào SHEET_GID bên dưới
+ * Tab dữ liệu: "QLDN2" (gid = 557275852)
  */
 const SHEET_ID = "1wH_rQwpF2jRO_8s277hq_kmuN-i79JMzKqNx43XAK0Y";
-const SHEET_GID = ""; // 👈 DÁN gid của tab QLDN2 vào đây (để trống = tab đầu tiên)
+const SHEET_GID = "557275852"; // 👈 tab QLDN2
 
-const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv${
-  SHEET_GID ? `&gid=${SHEET_GID}` : ""
-}`;
+const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
 
 export function useNhanSuData() {
   const [data, setData] = useState([]);
