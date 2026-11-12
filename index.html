@@ -18,8 +18,8 @@
 
     // ====== CẤU HÌNH SHEET ======
     const SHEET_ID = "1wH_rQwpF2jRO_8s277hq_kmuN-i79JMzKqNx43XAK0Y";
-    const GID_NHANSU = "557275852";   // tab QLDN2
-    const GID_DOANHNGHIEP = "869158415"; // tab DNphancong
+    const GID_NHANSU = "557275852";
+    const GID_DOANHNGHIEP = "869158415";
 
     const csvUrl = (gid) =>
       `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
@@ -34,7 +34,8 @@
       return iso;
     };
 
-    // Đọc CSV chung
+    const normalizeMST = (s) => (s || "").replace(/[\s\-\.]/g, "").trim();
+
     function useSheetData(gid, { filterEmpty }) {
       const [data, setData] = useState([]);
       const [loading, setLoading] = useState(true);
@@ -80,7 +81,7 @@
 
     const useDoanhNghiepData = () =>
       useSheetData(GID_DOANHNGHIEP, {
-        filterEmpty: (r) => r["Tên NNT"] || r["Mã cán bộ"],
+        filterEmpty: (r) => r["Tên NNT"] || r["Mã số thuế"] || r["Mã cán bộ"],
       });
 
     // ====== COMPONENT DÙNG CHUNG ======
@@ -223,6 +224,54 @@
       );
     }
 
+    // ====== TRA CỨU MST ======
+    function TraCuuMST({ data }) {
+      const [mst, setMst] = useState("");
+
+      const ketQua = useMemo(() => {
+        const key = normalizeMST(mst);
+        if (!key) return null;
+        return data.filter((d) => normalizeMST(d["Mã số thuế"]).includes(key));
+      }, [mst, data]);
+
+      return h("div", { className: "bg-white rounded-xl shadow-sm p-5 mb-6" },
+        h("h2", { className: "text-lg font-semibold text-gray-800 mb-1" }, "🔍 Tra cứu cán bộ quản lý theo MST"),
+        h("p", { className: "text-xs text-gray-500 mb-3" }, "Nhập mã số thuế (có thể nhập một phần) để tìm cán bộ quản lý tương ứng."),
+        h("input", {
+          type: "text",
+          placeholder: "Nhập mã số thuế, ví dụ: 0101234567",
+          value: mst,
+          onChange: (e) => setMst(e.target.value),
+          className: "w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400",
+        }),
+
+        ketQua === null
+          ? null
+          : ketQua.length === 0
+            ? h("div", { className: "mt-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3" },
+                `Không tìm thấy doanh nghiệp có MST chứa "${mst}".`
+              )
+            : h("div", { className: "mt-4 space-y-3" },
+                ketQua.map((d, i) =>
+                  h("div", { key: i, className: "border border-blue-100 bg-blue-50 rounded-lg p-4" },
+                    h("p", { className: "text-sm text-gray-600" },
+                      "MST: ", h("span", { className: "font-semibold text-gray-800" }, d["Mã số thuế"] || "—")
+                    ),
+                    h("p", { className: "text-base font-semibold text-blue-700 mt-1" },
+                      d["Tên NNT"] || "—"
+                    ),
+                    h("div", { className: "mt-2 grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-gray-700" },
+                      h("p", null, "👤 Cán bộ quản lý: ", h("span", { className: "font-medium" }, d["Tên cán bộ quản lý"] || "—")),
+                      h("p", null, "🆔 Mã cán bộ: ", h("span", { className: "font-medium" }, d["Mã cán bộ"] || "—")),
+                      h("p", null, "🏢 Phòng: ", h("span", { className: "font-medium" }, d["Tên phòng"] || "—")),
+                      h("p", null, "🏛️ CQT quản lý: ", h("span", { className: "font-medium" }, d["CQT quản lý"] || "—"))
+                    )
+                  )
+                )
+              )
+      );
+    }
+
     // ====== DOANH NGHIỆP ======
     function DoanhNghiepView() {
       const { data, loading, error } = useDoanhNghiepData();
@@ -235,7 +284,7 @@
         [data]
       );
       const danhSachCanBo = useMemo(
-        () => [...new Set(data.map((d) => d["Tên cán bộ"]).filter(Boolean))].sort(),
+        () => [...new Set(data.map((d) => d["Tên cán bộ quản lý"]).filter(Boolean))].sort(),
         [data]
       );
 
@@ -244,11 +293,12 @@
         return data.filter((d) => {
           const matchKeyword =
             (d["Tên NNT"] || "").toLowerCase().includes(kw) ||
+            (d["Mã số thuế"] || "").toLowerCase().includes(kw) ||
             (d["Mã cán bộ"] || "").toLowerCase().includes(kw) ||
-            (d["Tên cán bộ"] || "").toLowerCase().includes(kw) ||
+            (d["Tên cán bộ quản lý"] || "").toLowerCase().includes(kw) ||
             (d["Tên phòng"] || "").toLowerCase().includes(kw);
           const matchCQT = cqtFilter ? d["CQT quản lý"] === cqtFilter : true;
-          const matchCanBo = canBoFilter ? d["Tên cán bộ"] === canBoFilter : true;
+          const matchCanBo = canBoFilter ? d["Tên cán bộ quản lý"] === canBoFilter : true;
           return matchKeyword && matchCQT && matchCanBo;
         });
       }, [data, keyword, cqtFilter, canBoFilter]);
@@ -257,11 +307,14 @@
       if (error) return h(ErrorBox, { error });
 
       return h("div", { className: "max-w-7xl mx-auto" },
+        h(TraCuuMST, { data }),
+
         h("p", { className: "text-sm text-gray-500 mb-4" }, `Tổng: ${filtered.length} / ${data.length} doanh nghiệp`),
+
         h("div", { className: "flex flex-col md:flex-row gap-3 mb-6" },
           h("input", {
             type: "text",
-            placeholder: "Tìm theo tên NNT, mã/tên cán bộ, phòng...",
+            placeholder: "Tìm theo tên NNT, mã số thuế, mã/tên cán bộ, phòng...",
             value: keyword,
             onChange: (e) => setKeyword(e.target.value),
             className: "flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400",
@@ -283,6 +336,7 @@
             danhSachCanBo.map((x) => h("option", { key: x, value: x }, x))
           )
         ),
+
         filtered.length === 0
           ? h("div", { className: "text-center text-gray-500 py-12" }, "Không tìm thấy doanh nghiệp phù hợp.")
           : h("div", { className: "bg-white rounded-xl shadow-sm overflow-x-auto" },
@@ -290,30 +344,28 @@
                 h("thead", { className: "bg-gray-50 text-gray-600 uppercase text-xs" },
                   h("tr", null,
                     [
-                      "CQT quản lý",
-                      "Tên NNT",
-                      "Mã phòng",
-                      "Tên phòng",
-                      "Mã cán bộ",
-                      "Tên cán bộ",
-                      "Người tạo",
-                      "Ngày tạo",
-                      "Thời gian tạo",
+                      "Mã số thuế", "CQT quản lý", "Tên NNT", "Mã phòng", "Tên phòng",
+                      "Mã cán bộ", "Tên cán bộ quản lý", "Người tạo", "Ngày tạo", "Thời gian tạo",
+                      "Thay đổi bởi", "Ngày thay đổi", "Thời gian thay đổi",
                     ].map((x) => h("th", { key: x, className: "px-4 py-3 text-left whitespace-nowrap" }, x))
                   )
                 ),
                 h("tbody", { className: "divide-y divide-gray-100" },
                   filtered.map((d, i) =>
                     h("tr", { key: i, className: "hover:bg-gray-50" },
+                      h("td", { className: "px-4 py-3 font-medium text-gray-800 whitespace-nowrap" }, d["Mã số thuế"] || "—"),
                       h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, d["CQT quản lý"] || "—"),
                       h("td", { className: "px-4 py-3 font-medium text-gray-800" }, d["Tên NNT"] || "—"),
                       h("td", { className: "px-4 py-3 text-gray-700" }, d["Mã phòng quản lý"] || "—"),
                       h("td", { className: "px-4 py-3 text-gray-700" }, d["Tên phòng"] || "—"),
                       h("td", { className: "px-4 py-3 text-gray-700" }, d["Mã cán bộ"] || "—"),
-                      h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, d["Tên cán bộ"] || "—"),
-                      h("td", { className: "px-4 py-3 text-gray-700" }, d["Người tạo"] || "—"),
-                      h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, formatDate(d["Ngày tạo"])),
-                      h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, d["Thời gian tạo"] || "—")
+                      h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, d["Tên cán bộ quản lý"] || "—"),
+                      h("td", { className: "px-4 py-3 text-gray-700" }, d["Người tạo"] || d["Người tạo"] || "—"),
+                      h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, formatDate(d["Ngày tạo"] || d["Ngày tạo"])),
+                      h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, d["Thời gian tạo"] || "—"),
+                      h("td", { className: "px-4 py-3 text-gray-700" }, d["Thay đổi bởi"] || d["Thay đổi bởi"] || "—"),
+                      h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, formatDate(d["Ngày thay đổi"])),
+                      h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, d["Thời gian thay đổi"] || "—")
                     )
                   )
                 )
@@ -333,17 +385,13 @@
             h("button", {
               onClick: () => setTab("nhansu"),
               className: `px-4 py-2 text-sm font-medium border-b-2 ${
-                tab === "nhansu"
-                  ? "border-blue-600 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
+                tab === "nhansu" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"
               }`,
             }, "Nhân sự (QLDN2)"),
             h("button", {
               onClick: () => setTab("doanhnghiep"),
               className: `px-4 py-2 text-sm font-medium border-b-2 ${
-                tab === "doanhnghiep"
-                  ? "border-blue-600 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
+                tab === "doanhnghiep" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"
               }`,
             }, "Doanh nghiệp (DNphancong)")
           ),
