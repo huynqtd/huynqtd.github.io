@@ -3,23 +3,67 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Quản lý nhân sự & doanh nghiệp</title>
+  <title>Hệ thống quản lý nhân sự & doanh nghiệp</title>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: "#eef4ff", 100: "#d9e6ff", 200: "#bcd3ff", 300: "#8eb5ff",
+              400: "#598cff", 500: "#3366ff", 600: "#1f4de0", 700: "#1a3fb8",
+              800: "#1a3894", 900: "#1b3375",
+            },
+          },
+          boxShadow: {
+            card: "0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.1)",
+            pop: "0 10px 30px rgba(16,24,40,.15)",
+          },
+          keyframes: {
+            fadeIn: { "0%": { opacity: 0 }, "100%": { opacity: 1 } },
+            slideUp: { "0%": { opacity: 0, transform: "translateY(12px)" }, "100%": { opacity: 1, transform: "translateY(0)" } },
+            shimmer: { "100%": { transform: "translateX(100%)" } },
+          },
+          animation: {
+            fadeIn: "fadeIn .15s ease-out",
+            slideUp: "slideUp .2s ease-out",
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    .skeleton {
+      position: relative; overflow: hidden; background: #e5e7eb;
+    }
+    .skeleton::after {
+      content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.6), transparent);
+      animation: shimmer 1.2s infinite;
+    }
+    @keyframes shimmer { 100% { transform: translateX(100%); } }
+    ::-webkit-scrollbar { height: 8px; width: 8px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
 </head>
-<body class="bg-gray-100">
+<body class="bg-slate-50 text-slate-800 antialiased">
   <div id="root"></div>
 
   <script>
     const { useState, useEffect, useMemo } = React;
     const h = React.createElement;
 
-    // ====== CẤU HÌNH SHEET ======
+    // ====== CẤU HÌNH ======
     const SHEET_ID = "1wH_rQwpF2jRO_8s277hq_kmuN-i79JMzKqNx43XAK0Y";
     const GID_NHANSU = "557275852";
     const GID_DOANHNGHIEP = "869158415";
+    const APP_NAME = "Hệ thống quản lý";
+    const APP_SUB = "Nhân sự & Doanh nghiệp";
 
     const csvUrl = (gid) =>
       `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
@@ -33,10 +77,16 @@
       }
       return iso;
     };
-
     const normalizeMST = (s) => (s || "").replace(/[\s\-\.]/g, "").trim();
-
-    // Lấy giá trị theo nhiều biến thể tên cột (dấu sắc/huyền, khoảng trắng)
+    const normalizeTen = (s) =>
+      (s || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/đ/g, "d")
+        .replace(/Đ/g, "D")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
     const getVal = (obj, ...keys) => {
       for (const k of keys) {
         if (obj[k] !== undefined && obj[k] !== "") return obj[k];
@@ -44,127 +94,167 @@
       return "";
     };
 
+    // ====== HOOK ======
     function useSheetData(gid, { filterEmpty }) {
       const [data, setData] = useState([]);
       const [loading, setLoading] = useState(true);
       const [error, setError] = useState(null);
-
       useEffect(() => {
         let cancelled = false;
         fetch(csvUrl(gid))
           .then((res) => {
-            if (!res.ok) throw new Error(`HTTP ${res.status} – không tải được sheet (gid=${gid})`);
+            if (!res.ok) throw new Error(`HTTP ${res.status} – không tải được sheet`);
             return res.text();
           })
           .then((csv) => {
             if (cancelled) return;
-            if (csv.trim().startsWith("<")) {
+            if (csv.trim().startsWith("<"))
               throw new Error("Sheet chưa public. Share → Anyone with the link → Viewer.");
-            }
             const { data: rows } = Papa.parse(csv, { header: true, skipEmptyLines: true });
             const cleaned = rows
               .map((r) => {
                 const o = {};
-                Object.keys(r).forEach((k) => {
-                  o[k.trim()] = (r[k] ?? "").toString().trim();
-                });
+                Object.keys(r).forEach((k) => { o[k.trim()] = (r[k] ?? "").toString().trim(); });
                 return o;
               })
               .filter(filterEmpty);
-            if (cleaned.length === 0) {
+            if (cleaned.length === 0)
               throw new Error("Không có dòng dữ liệu. Kiểm tra tên cột hoặc gid.");
-            }
             setData(cleaned);
           })
           .catch((e) => !cancelled && setError(e))
           .finally(() => !cancelled && setLoading(false));
         return () => { cancelled = true; };
       }, [gid]);
-
       return { data, loading, error };
     }
 
     const useNhanSuData = () =>
       useSheetData(GID_NHANSU, { filterEmpty: (r) => r.id || r.hoTen });
-
     const useDoanhNghiepData = () =>
       useSheetData(GID_DOANHNGHIEP, {
         filterEmpty: (r) => r["Tên NNT"] || r["Mã số thuế"] || r["Mã cán bộ"],
       });
 
-    // ====== COMPONENT DÙNG CHUNG ======
-    function Loading() {
-      return h("div", { className: "min-h-screen flex items-center justify-center text-gray-500" },
-        "Đang tải dữ liệu từ Google Sheet..."
-      );
-    }
+    // ====== UI PRIMITIVES ======
+    const Badge = ({ children, color = "slate" }) => {
+      const map = {
+        slate: "bg-slate-100 text-slate-700 ring-slate-200",
+        blue: "bg-brand-50 text-brand-700 ring-brand-200",
+        green: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+        amber: "bg-amber-50 text-amber-700 ring-amber-200",
+        rose: "bg-rose-50 text-rose-700 ring-rose-200",
+      };
+      return h("span", {
+        className: `inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset ${map[color] || map.slate}`,
+      }, children);
+    };
 
-    function ErrorBox({ error }) {
-      return h("div", { className: "min-h-screen flex items-center justify-center p-4" },
-        h("div", { className: "bg-red-50 border border-red-200 text-red-700 rounded-lg p-6 max-w-lg" },
-          h("p", { className: "font-semibold mb-1" }, "Không tải được dữ liệu"),
-          h("p", { className: "text-sm" }, error.message)
+    const Avatar = ({ src, name, size = 40 }) => {
+      const [err, setErr] = useState(false);
+      const initial = (name || "?").trim().charAt(0).toUpperCase();
+      if (!src || err) {
+        return h("div", {
+          style: { width: size, height: size },
+          className: "rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-white flex items-center justify-center font-semibold shrink-0",
+        }, initial);
+      }
+      return h("img", {
+        src, alt: name,
+        style: { width: size, height: size },
+        className: "rounded-full object-cover ring-2 ring-white shadow-card shrink-0",
+        onError: () => setErr(true),
+      });
+    };
+
+    const Skeleton = ({ className = "" }) => h("div", { className: `skeleton rounded ${className}` });
+
+    // ====== LOADING / ERROR ======
+    function TableSkeleton() {
+      return h("div", { className: "bg-white rounded-xl shadow-card p-5" },
+        h("div", { className: "space-y-3" },
+          Array.from({ length: 8 }).map((_, i) =>
+            h("div", { key: i, className: "flex items-center gap-4" },
+              h(Skeleton, { className: "h-10 w-10 rounded-full" }),
+              h(Skeleton, { className: "h-3 flex-1" }),
+              h(Skeleton, { className: "h-3 w-40" }),
+              h(Skeleton, { className: "h-3 w-24" })
+            )
+          )
         )
       );
     }
 
-    // ====== MODAL: CHI TIẾT CÁN BỘ ======
+    function ErrorBox({ error }) {
+      return h("div", { className: "max-w-lg mx-auto mt-20" },
+        h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-rose-100 p-6" },
+          h("div", { className: "flex items-start gap-3" },
+            h("div", { className: "w-10 h-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center shrink-0" }, "!"),
+            h("div", null,
+              h("h3", { className: "font-semibold text-slate-800" }, "Không tải được dữ liệu"),
+              h("p", { className: "text-sm text-slate-600 mt-1" }, error.message)
+            )
+          )
+        )
+      );
+    }
+
+    // ====== MODAL CÁN BỘ ======
     function CanBoDetail({ tenCanBo, data, onClose }) {
       const dsQuanLy = useMemo(
-        () =>
-          data.filter(
-            (d) =>
-              (d["Tên cán bộ quản lý"] || "").trim().toLowerCase() ===
-              (tenCanBo || "").trim().toLowerCase()
-          ),
+        () => data.filter((d) => normalizeTen(d["Tên cán bộ quản lý"]) === normalizeTen(tenCanBo)),
         [data, tenCanBo]
       );
+      useEffect(() => {
+        const onKey = (e) => e.key === "Escape" && onClose();
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+      }, [onClose]);
 
       return h("div", {
-        className: "fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50",
+        className: "fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn",
         onClick: onClose,
       },
         h("div", {
-          className: "bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col",
+          className: "bg-white w-full max-w-4xl max-h-[85vh] rounded-2xl shadow-pop overflow-hidden flex flex-col animate-slideUp",
           onClick: (e) => e.stopPropagation(),
         },
-          // Header
-          h("div", { className: "flex items-center justify-between px-5 py-4 border-b border-gray-200" },
-            h("div", null,
-              h("h2", { className: "text-lg font-semibold text-gray-800" },
-                "Cán bộ: ", h("span", { className: "text-blue-700" }, tenCanBo || "—")
-              ),
-              h("p", { className: "text-sm text-gray-500" },
-                `Quản lý ${dsQuanLy.length} doanh nghiệp`
+          h("div", { className: "px-6 py-4 border-b border-slate-100 flex items-start justify-between gap-4" },
+            h("div", { className: "flex items-center gap-3" },
+              h(Avatar, { name: tenCanBo, size: 44 }),
+              h("div", null,
+                h("h2", { className: "text-lg font-semibold text-slate-800" }, tenCanBo || "—"),
+                h("p", { className: "text-sm text-slate-500" },
+                  "Đang quản lý ", h("span", { className: "font-semibold text-brand-700" }, dsQuanLy.length), " doanh nghiệp"
+                )
               )
             ),
             h("button", {
               onClick: onClose,
-              className: "text-gray-400 hover:text-gray-700 text-2xl leading-none px-2",
+              className: "w-9 h-9 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 text-xl leading-none flex items-center justify-center",
+              "aria-label": "Đóng",
             }, "×")
           ),
-
-          // Body
-          h("div", { className: "overflow-auto p-5" },
+          h("div", { className: "overflow-auto" },
             dsQuanLy.length === 0
-              ? h("p", { className: "text-center text-gray-500 py-8" },
-                  "Cán bộ này chưa được phân công quản lý doanh nghiệp nào."
+              ? h("div", { className: "text-center py-16" },
+                  h("div", { className: "text-4xl mb-3" }, "📭"),
+                  h("p", { className: "text-slate-500" }, "Cán bộ này chưa được phân công quản lý doanh nghiệp nào.")
                 )
               : h("table", { className: "w-full text-sm" },
-                  h("thead", { className: "bg-gray-50 text-gray-600 uppercase text-xs sticky top-0" },
+                  h("thead", { className: "bg-slate-50 text-slate-500 text-xs uppercase tracking-wide sticky top-0" },
                     h("tr", null,
                       ["Mã số thuế", "Tên NNT", "Phòng", "CQT quản lý"].map((x) =>
-                        h("th", { key: x, className: "px-3 py-2 text-left whitespace-nowrap" }, x)
-                      )
+                        h("th", { key: x, className: "px-4 py-3 text-left font-medium whitespace-nowrap" }, x))
                     )
                   ),
-                  h("tbody", { className: "divide-y divide-gray-100" },
+                  h("tbody", { className: "divide-y divide-slate-100" },
                     dsQuanLy.map((d, i) =>
-                      h("tr", { key: i, className: "hover:bg-gray-50" },
-                        h("td", { className: "px-3 py-2 font-medium text-gray-800 whitespace-nowrap" }, d["Mã số thuế"] || "—"),
-                        h("td", { className: "px-3 py-2 text-gray-800" }, d["Tên NNT"] || "—"),
-                        h("td", { className: "px-3 py-2 text-gray-700" }, d["Tên phòng"] || "—"),
-                        h("td", { className: "px-3 py-2 text-gray-700 whitespace-nowrap" }, d["CQT quản lý"] || "—")
+                      h("tr", { key: i, className: "hover:bg-slate-50/70" },
+                        h("td", { className: "px-4 py-3 font-mono text-xs text-slate-700 whitespace-nowrap" }, d["Mã số thuế"] || "—"),
+                        h("td", { className: "px-4 py-3 text-slate-800 font-medium" }, d["Tên NNT"] || "—"),
+                        h("td", { className: "px-4 py-3 text-slate-600" }, d["Tên phòng"] || "—"),
+                        h("td", { className: "px-4 py-3 text-slate-600 whitespace-nowrap" }, d["CQT quản lý"] || "—")
                       )
                     )
                   )
@@ -175,63 +265,62 @@
     }
 
     // ====== NHÂN SỰ ======
-    function NhanSuCard({ n }) {
-      return h("div", { className: "bg-white rounded-xl shadow-sm hover:shadow-md transition p-4 flex gap-4" },
-        h("img", {
-          src: n.avatar || "https://via.placeholder.com/80",
-          alt: n.hoTen,
-          className: "w-20 h-20 rounded-full object-cover border-2 border-blue-100 shrink-0",
-          onError: (e) => { e.currentTarget.src = "https://via.placeholder.com/80"; },
-        }),
+    function NhanSuCard({ n, onClick }) {
+      const chucVuColor =
+        /trưởng|phó|giám đốc|trưởng phòng/i.test(n.chucVu || "") ? "blue" :
+        /chuyên viên|kiểm tra/i.test(n.chucVu || "") ? "green" : "slate";
+      return h("div", {
+        onClick,
+        className: "group bg-white rounded-xl shadow-card hover:shadow-pop ring-1 ring-slate-100 hover:ring-brand-200 transition p-4 flex gap-4 cursor-pointer",
+      },
+        h(Avatar, { src: n.avatar, name: n.hoTen, size: 64 }),
         h("div", { className: "flex-1 min-w-0" },
-          h("h3", { className: "font-semibold text-gray-800 truncate" }, n.hoTen || "—"),
-          h("p", { className: "text-sm text-blue-600 font-medium" }, n.chucVu || "—"),
-          h("p", { className: "text-xs text-gray-500 mt-1" }, n.donVi || "—"),
-          h("p", { className: "text-xs text-gray-500" }, n.toNghiepVu || "—"),
-          h("div", { className: "mt-2 text-xs text-gray-600 space-y-0.5" },
-            h("p", null, "📞 " + (n.soDienThoai || "—")),
-            h("p", null, "☎️ " + (n.phone_cq || "—")),
-            h("p", null, "🎂 " + formatDate(n.ngaySinh))
+          h("div", { className: "flex items-start justify-between gap-2" },
+            h("h3", { className: "font-semibold text-slate-800 truncate group-hover:text-brand-700" }, n.hoTen || "—"),
+            h(Badge, { color: chucVuColor }, n.chucVu || "—")
+          ),
+          h("p", { className: "text-xs text-slate-500 mt-1 truncate" }, `${n.donVi || "—"}${n.toNghiepVu ? " • " + n.toNghiepVu : ""}`),
+          h("div", { className: "mt-3 grid grid-cols-1 gap-1 text-xs text-slate-600" },
+            h("div", { className: "flex items-center gap-2" }, h("span", { className: "text-slate-400" }, "📞"), n.soDienThoai || "—"),
+            h("div", { className: "flex items-center gap-2" }, h("span", { className: "text-slate-400" }, "☎️"), n.phone_cq || "—"),
+            h("div", { className: "flex items-center gap-2" }, h("span", { className: "text-slate-400" }, "🎂"), formatDate(n.ngaySinh))
           )
         )
       );
     }
 
     function NhanSuTable({ data, onCanBoClick }) {
-      return h("div", { className: "bg-white rounded-xl shadow-sm overflow-x-auto" },
-        h("table", { className: "w-full text-sm" },
-          h("thead", { className: "bg-gray-50 text-gray-600 uppercase text-xs" },
-            h("tr", null,
-              ["Nhân sự", "Chức vụ", "Đơn vị", "Tổ nghiệp vụ", "SĐT", "SĐT CQ", "Ngày sinh"].map((x) =>
-                h("th", { key: x, className: "px-4 py-3 text-left" }, x))
-            )
-          ),
-          h("tbody", { className: "divide-y divide-gray-100" },
-            data.map((n) =>
-              h("tr", { key: n.id || n.hoTen, className: "hover:bg-gray-50" },
-                h("td", { className: "px-4 py-3" },
-                  h("div", { className: "flex items-center gap-3" },
-                    h("img", {
-                      src: n.avatar || "https://via.placeholder.com/40",
-                      alt: n.hoTen,
-                      className: "w-9 h-9 rounded-full object-cover",
-                      onError: (e) => { e.currentTarget.src = "https://via.placeholder.com/40"; },
-                    }),
-                    onCanBoClick
-                      ? h("button", {
-                          onClick: () => onCanBoClick(n.hoTen),
-                          className: "font-medium text-blue-600 hover:underline whitespace-nowrap",
-                          title: "Xem doanh nghiệp được quản lý",
-                        }, n.hoTen || "—")
-                      : h("span", { className: "font-medium text-gray-800 whitespace-nowrap" }, n.hoTen || "—")
-                  )
-                ),
-                h("td", { className: "px-4 py-3 text-gray-700" }, n.chucVu || "—"),
-                h("td", { className: "px-4 py-3 text-gray-700" }, n.donVi || "—"),
-                h("td", { className: "px-4 py-3 text-gray-700" }, n.toNghiepVu || "—"),
-                h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, n.soDienThoai || "—"),
-                h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, n.phone_cq || "—"),
-                h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, formatDate(n.ngaySinh))
+      return h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 overflow-hidden" },
+        h("div", { className: "overflow-x-auto" },
+          h("table", { className: "w-full text-sm" },
+            h("thead", { className: "bg-slate-50 text-slate-500 text-xs uppercase tracking-wide sticky top-0" },
+              h("tr", null,
+                ["Nhân sự", "Chức vụ", "Đơn vị", "Tổ nghiệp vụ", "SĐT", "SĐT CQ", "Ngày sinh"].map((x) =>
+                  h("th", { key: x, className: "px-4 py-3 text-left font-medium whitespace-nowrap" }, x))
+              )
+            ),
+            h("tbody", { className: "divide-y divide-slate-100" },
+              data.map((n) =>
+                h("tr", { key: n.id || n.hoTen, className: "hover:bg-slate-50/70" },
+                  h("td", { className: "px-4 py-3" },
+                    h("div", { className: "flex items-center gap-3" },
+                      h(Avatar, { src: n.avatar, name: n.hoTen, size: 36 }),
+                      onCanBoClick
+                        ? h("button", {
+                            onClick: () => onCanBoClick(n.hoTen),
+                            className: "font-medium text-brand-700 hover:underline whitespace-nowrap",
+                            title: "Xem doanh nghiệp được quản lý",
+                          }, n.hoTen || "—")
+                        : h("span", { className: "font-medium text-slate-800 whitespace-nowrap" }, n.hoTen || "—")
+                    )
+                  ),
+                  h("td", { className: "px-4 py-3 text-slate-700" }, n.chucVu || "—"),
+                  h("td", { className: "px-4 py-3 text-slate-700" }, n.donVi || "—"),
+                  h("td", { className: "px-4 py-3 text-slate-700" }, n.toNghiepVu || "—"),
+                  h("td", { className: "px-4 py-3 text-slate-700 whitespace-nowrap" }, n.soDienThoai || "—"),
+                  h("td", { className: "px-4 py-3 text-slate-700 whitespace-nowrap" }, n.phone_cq || "—"),
+                  h("td", { className: "px-4 py-3 text-slate-700 whitespace-nowrap" }, formatDate(n.ngaySinh))
+                )
               )
             )
           )
@@ -239,9 +328,8 @@
       );
     }
 
-    function NhanSuView() {
+    function NhanSuView({ dnData }) {
       const { data, loading, error } = useNhanSuData();
-      const dnData = useDoanhNghiepData(); // để click cán bộ xem DN quản lý
       const [keyword, setKeyword] = useState("");
       const [donViFilter, setDonViFilter] = useState("");
       const [viewMode, setViewMode] = useState("card");
@@ -251,63 +339,78 @@
         () => [...new Set(data.map((n) => n.donVi).filter(Boolean))],
         [data]
       );
-
       const filtered = useMemo(() => {
         const kw = keyword.toLowerCase();
         return data.filter((n) => {
-          const matchKeyword =
+          const okKw =
             (n.hoTen || "").toLowerCase().includes(kw) ||
             (n.chucVu || "").toLowerCase().includes(kw) ||
             (n.soDienThoai || "").includes(keyword);
-          const matchDonVi = donViFilter ? n.donVi === donViFilter : true;
-          return matchKeyword && matchDonVi;
+          return okKw && (donViFilter ? n.donVi === donViFilter : true);
         });
       }, [data, keyword, donViFilter]);
 
-      if (loading) return h(Loading);
+      if (loading) return h(TableSkeleton);
       if (error) return h(ErrorBox, { error });
 
-      return h("div", { className: "max-w-6xl mx-auto" },
-        h("p", { className: "text-sm text-gray-500 mb-4" }, `Tổng: ${filtered.length} / ${data.length} nhân sự`),
-        h("div", { className: "flex flex-col md:flex-row gap-3 mb-6" },
-          h("input", {
-            type: "text",
-            placeholder: "Tìm theo tên, chức vụ, SĐT...",
-            value: keyword,
-            onChange: (e) => setKeyword(e.target.value),
-            className: "flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400",
-          }),
+      return h("div", null,
+        h("div", { className: "mb-4 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2" },
+          h("div", null,
+            h("h1", { className: "text-xl font-semibold text-slate-800" }, "Danh sách nhân sự"),
+            h("p", { className: "text-sm text-slate-500" }, `Hiển thị ${filtered.length} / ${data.length} nhân sự`)
+          )
+        ),
+        h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 p-3 mb-4 flex flex-col md:flex-row gap-3" },
+          h("div", { className: "relative flex-1" },
+            h("span", { className: "absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" }, "🔎"),
+            h("input", {
+              type: "text",
+              placeholder: "Tìm theo tên, chức vụ, SĐT...",
+              value: keyword,
+              onChange: (e) => setKeyword(e.target.value),
+              className: "w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none text-sm",
+            })
+          ),
           h("select", {
             value: donViFilter,
             onChange: (e) => setDonViFilter(e.target.value),
-            className: "px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400",
+            className: "px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none",
           },
             h("option", { value: "" }, "Tất cả đơn vị"),
             danhSachDonVi.map((dv) => h("option", { key: dv, value: dv }, dv))
           ),
-          h("div", { className: "flex rounded-lg overflow-hidden border border-gray-300" },
-            h("button", {
-              onClick: () => setViewMode("card"),
-              className: `px-4 py-2 text-sm ${viewMode === "card" ? "bg-blue-600 text-white" : "bg-white text-gray-700"}`,
-            }, "Thẻ"),
-            h("button", {
-              onClick: () => setViewMode("table"),
-              className: `px-4 py-2 text-sm ${viewMode === "table" ? "bg-blue-600 text-white" : "bg-white text-gray-700"}`,
-            }, "Bảng")
+          h("div", { className: "inline-flex rounded-lg border border-slate-200 overflow-hidden" },
+            ["card", "table"].map((m) =>
+              h("button", {
+                key: m,
+                onClick: () => setViewMode(m),
+                className: `px-3 py-2 text-sm font-medium ${viewMode === m ? "bg-brand-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`,
+              }, m === "card" ? "Thẻ" : "Bảng")
+            )
           )
         ),
         filtered.length === 0
-          ? h("div", { className: "text-center text-gray-500 py-12" }, "Không tìm thấy nhân sự phù hợp.")
+          ? h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 py-16 text-center" },
+              h("div", { className: "text-4xl mb-3" }, "🔍"),
+              h("p", { className: "text-slate-600 font-medium" }, "Không tìm thấy nhân sự phù hợp"),
+              h("p", { className: "text-sm text-slate-400 mt-1" }, "Thử từ khóa khác hoặc xóa bộ lọc.")
+            )
           : viewMode === "card"
             ? h("div", { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" },
-                filtered.map((n) => h(NhanSuCard, { key: n.id || n.hoTen, n }))
+                filtered.map((n) =>
+                  h(NhanSuCard, {
+                    key: n.id || n.hoTen,
+                    n,
+                    onClick: () => setSelectedCanBo(n.hoTen),
+                  })
+                )
               )
             : h(NhanSuTable, { data: filtered, onCanBoClick: setSelectedCanBo }),
 
         selectedCanBo
           ? h(CanBoDetail, {
               tenCanBo: selectedCanBo,
-              data: dnData.data,
+              data: dnData,
               onClose: () => setSelectedCanBo(null),
             })
           : null
@@ -317,44 +420,60 @@
     // ====== TRA CỨU MST ======
     function TraCuuMST({ data }) {
       const [mst, setMst] = useState("");
-
       const ketQua = useMemo(() => {
         const key = normalizeMST(mst);
         if (!key) return null;
         return data.filter((d) => normalizeMST(d["Mã số thuế"]).includes(key));
       }, [mst, data]);
 
-      return h("div", { className: "bg-white rounded-xl shadow-sm p-5 mb-6" },
-        h("h2", { className: "text-lg font-semibold text-gray-800 mb-1" }, "🔍 Tra cứu cán bộ quản lý theo MST"),
-        h("p", { className: "text-xs text-gray-500 mb-3" }, "Nhập mã số thuế (có thể nhập một phần) để tìm cán bộ quản lý tương ứng."),
+      return h("div", { className: "bg-gradient-to-br from-brand-600 to-brand-800 rounded-2xl shadow-pop p-6 mb-6 text-white" },
+        h("div", { className: "flex items-start gap-3 mb-4" },
+          h("div", { className: "w-10 h-10 rounded-lg bg-white/15 flex items-center justify-center text-xl" }, "🔍"),
+          h("div", null,
+            h("h2", { className: "text-lg font-semibold" }, "Tra cứu cán bộ quản lý theo MST"),
+            h("p", { className: "text-sm text-white/70" }, "Nhập mã số thuế (có thể nhập một phần) để tìm cán bộ phụ trách.")
+          )
+        ),
         h("input", {
           type: "text",
-          placeholder: "Nhập mã số thuế, ví dụ: 0101234567",
+          placeholder: "Ví dụ: 0101234567",
           value: mst,
           onChange: (e) => setMst(e.target.value),
-          className: "w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400",
+          className: "w-full px-4 py-2.5 rounded-lg bg-white/95 text-slate-800 placeholder-slate-400 outline-none focus:ring-2 focus:ring-white/60 text-sm",
         }),
-
         ketQua === null
           ? null
           : ketQua.length === 0
-            ? h("div", { className: "mt-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3" },
+            ? h("div", { className: "mt-4 text-sm bg-rose-500/20 ring-1 ring-rose-300/40 rounded-lg p-3" },
                 `Không tìm thấy doanh nghiệp có MST chứa "${mst}".`
               )
             : h("div", { className: "mt-4 space-y-3" },
                 ketQua.map((d, i) =>
-                  h("div", { key: i, className: "border border-blue-100 bg-blue-50 rounded-lg p-4" },
-                    h("p", { className: "text-sm text-gray-600" },
-                      "MST: ", h("span", { className: "font-semibold text-gray-800" }, d["Mã số thuế"] || "—")
+                  h("div", { key: i, className: "bg-white text-slate-800 rounded-xl p-4 shadow-card" },
+                    h("div", { className: "flex items-center justify-between gap-3" },
+                      h("div", null,
+                        h("p", { className: "text-xs text-slate-500" }, "MST"),
+                        h("p", { className: "font-mono font-semibold text-slate-800" }, d["Mã số thuế"] || "—")
+                      ),
+                      h(Badge, { color: "blue" }, d["CQT quản lý"] || "—")
                     ),
-                    h("p", { className: "text-base font-semibold text-blue-700 mt-1" },
-                      d["Tên NNT"] || "—"
-                    ),
-                    h("div", { className: "mt-2 grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-gray-700" },
-                      h("p", null, "👤 Cán bộ quản lý: ", h("span", { className: "font-medium" }, d["Tên cán bộ quản lý"] || "—")),
-                      h("p", null, "🆔 Mã cán bộ: ", h("span", { className: "font-medium" }, d["Mã cán bộ"] || "—")),
-                      h("p", null, "🏢 Phòng: ", h("span", { className: "font-medium" }, d["Tên phòng"] || "—")),
-                      h("p", null, "🏛️ CQT quản lý: ", h("span", { className: "font-medium" }, d["CQT quản lý"] || "—"))
+                    h("p", { className: "font-semibold text-brand-700 mt-2" }, d["Tên NNT"] || "—"),
+                    h("div", { className: "mt-3 grid sm:grid-cols-2 gap-3 text-sm" },
+                      h("div", { className: "flex items-center gap-2" },
+                        h("span", { className: "text-slate-400" }, "👤"),
+                        h("span", { className: "text-slate-500" }, "Cán bộ:"),
+                        h("span", { className: "font-medium text-slate-800" }, d["Tên cán bộ quản lý"] || "—")
+                      ),
+                      h("div", { className: "flex items-center gap-2" },
+                        h("span", { className: "text-slate-400" }, "🆔"),
+                        h("span", { className: "text-slate-500" }, "Mã CB:"),
+                        h("span", { className: "font-medium text-slate-800" }, d["Mã cán bộ"] || "—")
+                      ),
+                      h("div", { className: "flex items-center gap-2" },
+                        h("span", { className: "text-slate-400" }, "🏢"),
+                        h("span", { className: "text-slate-500" }, "Phòng:"),
+                        h("span", { className: "font-medium text-slate-800" }, d["Tên phòng"] || "—")
+                      )
                     )
                   )
                 )
@@ -363,8 +482,8 @@
     }
 
     // ====== DOANH NGHIỆP ======
-    function DoanhNghiepView() {
-      const { data, loading, error } = useDoanhNghiepData();
+    function DoanhNghiepView({ dnData, dnLoading, dnError }) {
+      const data = dnData;
       const [keyword, setKeyword] = useState("");
       const [cqtFilter, setCqtFilter] = useState("");
       const [canBoFilter, setCanBoFilter] = useState("");
@@ -378,42 +497,45 @@
         () => [...new Set(data.map((d) => d["Tên cán bộ quản lý"]).filter(Boolean))].sort(),
         [data]
       );
-
       const filtered = useMemo(() => {
         const kw = keyword.toLowerCase();
         return data.filter((d) => {
-          const matchKeyword =
+          const okKw =
             (d["Tên NNT"] || "").toLowerCase().includes(kw) ||
             (d["Mã số thuế"] || "").toLowerCase().includes(kw) ||
             (d["Mã cán bộ"] || "").toLowerCase().includes(kw) ||
             (d["Tên cán bộ quản lý"] || "").toLowerCase().includes(kw) ||
             (d["Tên phòng"] || "").toLowerCase().includes(kw);
-          const matchCQT = cqtFilter ? d["CQT quản lý"] === cqtFilter : true;
-          const matchCanBo = canBoFilter ? d["Tên cán bộ quản lý"] === canBoFilter : true;
-          return matchKeyword && matchCQT && matchCanBo;
+          const okCQT = cqtFilter ? d["CQT quản lý"] === cqtFilter : true;
+          const okCB = canBoFilter ? d["Tên cán bộ quản lý"] === canBoFilter : true;
+          return okKw && okCQT && okCB;
         });
       }, [data, keyword, cqtFilter, canBoFilter]);
 
-      if (loading) return h(Loading);
-      if (error) return h(ErrorBox, { error });
+      if (dnLoading) return h(TableSkeleton);
+      if (dnError) return h(ErrorBox, { error: dnError });
 
-      return h("div", { className: "max-w-7xl mx-auto" },
+      return h("div", null,
         h(TraCuuMST, { data }),
-
-        h("p", { className: "text-sm text-gray-500 mb-4" }, `Tổng: ${filtered.length} / ${data.length} doanh nghiệp`),
-
-        h("div", { className: "flex flex-col md:flex-row gap-3 mb-6" },
-          h("input", {
-            type: "text",
-            placeholder: "Tìm theo tên NNT, mã số thuế, mã/tên cán bộ, phòng...",
-            value: keyword,
-            onChange: (e) => setKeyword(e.target.value),
-            className: "flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400",
-          }),
+        h("div", { className: "mb-4" },
+          h("h1", { className: "text-xl font-semibold text-slate-800" }, "Danh sách doanh nghiệp"),
+          h("p", { className: "text-sm text-slate-500" }, `Hiển thị ${filtered.length} / ${data.length} doanh nghiệp`)
+        ),
+        h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 p-3 mb-4 flex flex-col md:flex-row gap-3" },
+          h("div", { className: "relative flex-1" },
+            h("span", { className: "absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" }, "🔎"),
+            h("input", {
+              type: "text",
+              placeholder: "Tìm theo tên NNT, MST, cán bộ, phòng...",
+              value: keyword,
+              onChange: (e) => setKeyword(e.target.value),
+              className: "w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none text-sm",
+            })
+          ),
           h("select", {
             value: cqtFilter,
             onChange: (e) => setCqtFilter(e.target.value),
-            className: "px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400",
+            className: "px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none",
           },
             h("option", { value: "" }, "Tất cả CQT"),
             danhSachCQT.map((x) => h("option", { key: x, value: x }, x))
@@ -421,56 +543,63 @@
           h("select", {
             value: canBoFilter,
             onChange: (e) => setCanBoFilter(e.target.value),
-            className: "px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400",
+            className: "px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none",
           },
             h("option", { value: "" }, "Tất cả cán bộ"),
             danhSachCanBo.map((x) => h("option", { key: x, value: x }, x))
           )
         ),
-
         filtered.length === 0
-          ? h("div", { className: "text-center text-gray-500 py-12" }, "Không tìm thấy doanh nghiệp phù hợp.")
-          : h("div", { className: "bg-white rounded-xl shadow-sm overflow-x-auto" },
-              h("table", { className: "w-full text-sm" },
-                h("thead", { className: "bg-gray-50 text-gray-600 uppercase text-xs" },
-                  h("tr", null,
-                    [
-                      "Mã số thuế", "CQT quản lý", "Tên NNT", "Mã phòng", "Tên phòng",
-                      "Mã cán bộ", "Tên cán bộ quản lý", "Người tạo", "Ngày tạo", "Thời gian tạo",
-                      "Thay đổi bởi", "Ngày thay đổi", "Thời gian thay đổi",
-                    ].map((x) => h("th", { key: x, className: "px-4 py-3 text-left whitespace-nowrap" }, x))
-                  )
-                ),
-                h("tbody", { className: "divide-y divide-gray-100" },
-                  filtered.map((d, i) =>
-                    h("tr", { key: i, className: "hover:bg-gray-50" },
-                      h("td", { className: "px-4 py-3 font-medium text-gray-800 whitespace-nowrap" }, d["Mã số thuế"] || "—"),
-                      h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, d["CQT quản lý"] || "—"),
-                      h("td", { className: "px-4 py-3 font-medium text-gray-800" }, d["Tên NNT"] || "—"),
-                      h("td", { className: "px-4 py-3 text-gray-700" }, d["Mã phòng quản lý"] || "—"),
-                      h("td", { className: "px-4 py-3 text-gray-700" }, d["Tên phòng"] || "—"),
-                      h("td", { className: "px-4 py-3 text-gray-700" }, d["Mã cán bộ"] || "—"),
-                      h("td", { className: "px-4 py-3 whitespace-nowrap" },
-                        d["Tên cán bộ quản lý"]
-                          ? h("button", {
-                              onClick: () => setSelectedCanBo(d["Tên cán bộ quản lý"]),
-                              className: "text-blue-600 hover:underline font-medium",
-                              title: "Xem danh sách doanh nghiệp được quản lý",
-                            }, d["Tên cán bộ quản lý"])
-                          : "—"
-                      ),
-                      h("td", { className: "px-4 py-3 text-gray-700" }, getVal(d, "Người tạo", "Người tạo") || "—"),
-                      h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, formatDate(getVal(d, "Ngày tạo", "Ngày tạo"))),
-                      h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, d["Thời gian tạo"] || "—"),
-                      h("td", { className: "px-4 py-3 text-gray-700" }, getVal(d, "Thay đổi bởi", "Thay đổi bởi") || "—"),
-                      h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, formatDate(d["Ngày thay đổi"])),
-                      h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, d["Thời gian thay đổi"] || "—")
+          ? h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 py-16 text-center" },
+              h("div", { className: "text-4xl mb-3" }, "🏢"),
+              h("p", { className: "text-slate-600 font-medium" }, "Không tìm thấy doanh nghiệp phù hợp"),
+              h("p", { className: "text-sm text-slate-400 mt-1" }, "Thử từ khóa khác hoặc xóa bộ lọc.")
+            )
+          : h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 overflow-hidden" },
+              h("div", { className: "overflow-x-auto max-h-[70vh]" },
+                h("table", { className: "w-full text-sm" },
+                  h("thead", { className: "bg-slate-50 text-slate-500 text-xs uppercase tracking-wide sticky top-0 z-10" },
+                    h("tr", null,
+                      [
+                        "Mã số thuế", "CQT quản lý", "Tên NNT", "Mã phòng", "Tên phòng",
+                        "Mã cán bộ", "Tên cán bộ quản lý", "Người tạo", "Ngày tạo", "Thời gian tạo",
+                        "Thay đổi bởi", "Ngày thay đổi", "Thời gian thay đổi",
+                      ].map((x) => h("th", { key: x, className: "px-4 py-3 text-left font-medium whitespace-nowrap" }, x))
+                    )
+                  ),
+                  h("tbody", { className: "divide-y divide-slate-100" },
+                    filtered.map((d, i) =>
+                      h("tr", { key: i, className: "hover:bg-slate-50/70" },
+                        h("td", { className: "px-4 py-3 font-mono text-xs text-slate-700 whitespace-nowrap" }, d["Mã số thuế"] || "—"),
+                        h("td", { className: "px-4 py-3 whitespace-nowrap" }, h(Badge, { color: "slate" }, d["CQT quản lý"] || "—")),
+                        h("td", { className: "px-4 py-3 font-medium text-slate-800" }, d["Tên NNT"] || "—"),
+                        h("td", { className: "px-4 py-3 text-slate-600" }, d["Mã phòng quản lý"] || "—"),
+                        h("td", { className: "px-4 py-3 text-slate-600" }, d["Tên phòng"] || "—"),
+                        h("td", { className: "px-4 py-3 text-slate-600" }, d["Mã cán bộ"] || "—"),
+                        h("td", { className: "px-4 py-3 whitespace-nowrap" },
+                          d["Tên cán bộ quản lý"]
+                            ? h("button", {
+                                onClick: () => setSelectedCanBo(d["Tên cán bộ quản lý"]),
+                                className: "inline-flex items-center gap-1.5 text-brand-700 hover:text-brand-800 hover:underline font-medium",
+                                title: "Xem danh sách doanh nghiệp được quản lý",
+                              },
+                                h("span", { className: "w-1.5 h-1.5 rounded-full bg-brand-500" }),
+                                d["Tên cán bộ quản lý"]
+                              )
+                            : "—"
+                        ),
+                        h("td", { className: "px-4 py-3 text-slate-600" }, getVal(d, "Người tạo", "Người tạo") || "—"),
+                        h("td", { className: "px-4 py-3 text-slate-600 whitespace-nowrap" }, formatDate(getVal(d, "Ngày tạo", "Ngày tạo"))),
+                        h("td", { className: "px-4 py-3 text-slate-600 whitespace-nowrap" }, d["Thời gian tạo"] || "—"),
+                        h("td", { className: "px-4 py-3 text-slate-600" }, getVal(d, "Thay đổi bởi", "Thay đổi bởi") || "—"),
+                        h("td", { className: "px-4 py-3 text-slate-600 whitespace-nowrap" }, formatDate(d["Ngày thay đổi"])),
+                        h("td", { className: "px-4 py-3 text-slate-600 whitespace-nowrap" }, d["Thời gian thay đổi"] || "—")
+                      )
                     )
                   )
                 )
               )
             ),
-
         selectedCanBo
           ? h(CanBoDetail, {
               tenCanBo: selectedCanBo,
@@ -481,28 +610,62 @@
       );
     }
 
-    // ====== APP ======
+    // ====== LAYOUT ======
+    function Header({ tab, setTab }) {
+      const tabs = [
+        { id: "nhansu", label: "Nhân sự", icon: "👥" },
+        { id: "doanhnghiep", label: "Doanh nghiệp", icon: "🏢" },
+      ];
+      return h("header", { className: "sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200" },
+        h("div", { className: "max-w-7xl mx-auto px-6" },
+          h("div", { className: "h-16 flex items-center justify-between gap-4" },
+            h("div", { className: "flex items-center gap-3" },
+              h("div", { className: "w-9 h-9 rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-white flex items-center justify-center font-bold shadow-card" }, "Q"),
+              h("div", { className: "leading-tight" },
+                h("p", { className: "font-semibold text-slate-800" }, APP_NAME),
+                h("p", { className: "text-xs text-slate-500" }, APP_SUB)
+              )
+            ),
+            h("nav", { className: "flex items-center gap-1" },
+              tabs.map((t) =>
+                h("button", {
+                  key: t.id,
+                  onClick: () => setTab(t.id),
+                  className: `px-3 py-2 rounded-lg text-sm font-medium transition ${
+                    tab === t.id
+                      ? "bg-brand-50 text-brand-700 ring-1 ring-brand-100"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`,
+                },
+                  h("span", { className: "mr-1.5" }, t.icon),
+                  t.label
+                )
+              )
+            )
+          )
+        )
+      );
+    }
+
     function App() {
       const [tab, setTab] = useState("nhansu");
-
-      return h("div", { className: "min-h-screen p-6" },
-        h("div", { className: "max-w-7xl mx-auto" },
-          h("h1", { className: "text-2xl font-bold text-gray-800 mb-4" }, "Quản lý nhân sự & doanh nghiệp"),
-          h("div", { className: "flex gap-2 mb-6 border-b border-gray-200" },
-            h("button", {
-              onClick: () => setTab("nhansu"),
-              className: `px-4 py-2 text-sm font-medium border-b-2 ${
-                tab === "nhansu" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"
-              }`,
-            }, "Nhân sự (QLDN2)"),
-            h("button", {
-              onClick: () => setTab("doanhnghiep"),
-              className: `px-4 py-2 text-sm font-medium border-b-2 ${
-                tab === "doanhnghiep" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"
-              }`,
-            }, "Doanh nghiệp (DNphancong)")
-          ),
-          tab === "nhansu" ? h(NhanSuView) : h(DoanhNghiepView)
+      const dn = useDoanhNghiepData();
+      return h("div", { className: "min-h-screen flex flex-col" },
+        h(Header, { tab, setTab }),
+        h("main", { className: "flex-1 max-w-7xl w-full mx-auto px-6 py-6" },
+          tab === "nhansu"
+            ? h(NhanSuView, { dnData: dn.data })
+            : h(DoanhNghiepView, {
+                dnData: dn.data,
+                dnLoading: dn.loading,
+                dnError: dn.error,
+              })
+        ),
+        h("footer", { className: "border-t border-slate-200 bg-white" },
+          h("div", { className: "max-w-7xl mx-auto px-6 py-4 text-xs text-slate-500 flex items-center justify-between" },
+            h("span", null, "© ", new Date().getFullYear(), " ", APP_NAME),
+            h("span", null, "Dữ liệu từ Google Sheets")
+          )
         )
       );
     }
