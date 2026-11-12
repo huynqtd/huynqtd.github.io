@@ -94,7 +94,6 @@
       return "";
     };
 
-    // Tự dò cột MST theo nhiều biến thể + fallback theo từ khóa
     const getMST = (d) => {
       const candidates = [
         "Mã số thuế", "MST", "Mã Số Thuế", "Ma so thue", "Mã số thuế (MST)",
@@ -110,17 +109,7 @@
       return key ? d[key] : "";
     };
 
-    // Debug 1 lần: in header thực tế ra Console
-    let __loggedHeader = false;
-    const debugHeader = (rows) => {
-      if (!__loggedHeader && rows.length > 0) {
-        __loggedHeader = true;
-        console.log("📋 Header thực tế trong sheet:", Object.keys(rows[0]));
-        console.log("🔍 Dòng mẫu:", rows[0]);
-      }
-    };
-
-    // ====== HOOK ĐỌC SHEET ======
+    // ====== HOOK ======
     function useSheetData(gid, { filterEmpty }) {
       const [data, setData] = useState([]);
       const [loading, setLoading] = useState(true);
@@ -151,7 +140,6 @@
             if (cleaned.length === 0) {
               throw new Error("Không có dòng dữ liệu. Kiểm tra tên cột hoặc gid.");
             }
-            debugHeader(cleaned);
             setData(cleaned);
           })
           .catch((e) => !cancelled && setError(e))
