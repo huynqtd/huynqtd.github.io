@@ -36,6 +36,14 @@
 
     const normalizeMST = (s) => (s || "").replace(/[\s\-\.]/g, "").trim();
 
+    // Lấy giá trị theo nhiều biến thể tên cột (dấu sắc/huyền, khoảng trắng)
+    const getVal = (obj, ...keys) => {
+      for (const k of keys) {
+        if (obj[k] !== undefined && obj[k] !== "") return obj[k];
+      }
+      return "";
+    };
+
     function useSheetData(gid, { filterEmpty }) {
       const [data, setData] = useState([]);
       const [loading, setLoading] = useState(true);
@@ -100,6 +108,72 @@
       );
     }
 
+    // ====== MODAL: CHI TIẾT CÁN BỘ ======
+    function CanBoDetail({ tenCanBo, data, onClose }) {
+      const dsQuanLy = useMemo(
+        () =>
+          data.filter(
+            (d) =>
+              (d["Tên cán bộ quản lý"] || "").trim().toLowerCase() ===
+              (tenCanBo || "").trim().toLowerCase()
+          ),
+        [data, tenCanBo]
+      );
+
+      return h("div", {
+        className: "fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50",
+        onClick: onClose,
+      },
+        h("div", {
+          className: "bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col",
+          onClick: (e) => e.stopPropagation(),
+        },
+          // Header
+          h("div", { className: "flex items-center justify-between px-5 py-4 border-b border-gray-200" },
+            h("div", null,
+              h("h2", { className: "text-lg font-semibold text-gray-800" },
+                "Cán bộ: ", h("span", { className: "text-blue-700" }, tenCanBo || "—")
+              ),
+              h("p", { className: "text-sm text-gray-500" },
+                `Quản lý ${dsQuanLy.length} doanh nghiệp`
+              )
+            ),
+            h("button", {
+              onClick: onClose,
+              className: "text-gray-400 hover:text-gray-700 text-2xl leading-none px-2",
+            }, "×")
+          ),
+
+          // Body
+          h("div", { className: "overflow-auto p-5" },
+            dsQuanLy.length === 0
+              ? h("p", { className: "text-center text-gray-500 py-8" },
+                  "Cán bộ này chưa được phân công quản lý doanh nghiệp nào."
+                )
+              : h("table", { className: "w-full text-sm" },
+                  h("thead", { className: "bg-gray-50 text-gray-600 uppercase text-xs sticky top-0" },
+                    h("tr", null,
+                      ["Mã số thuế", "Tên NNT", "Phòng", "CQT quản lý"].map((x) =>
+                        h("th", { key: x, className: "px-3 py-2 text-left whitespace-nowrap" }, x)
+                      )
+                    )
+                  ),
+                  h("tbody", { className: "divide-y divide-gray-100" },
+                    dsQuanLy.map((d, i) =>
+                      h("tr", { key: i, className: "hover:bg-gray-50" },
+                        h("td", { className: "px-3 py-2 font-medium text-gray-800 whitespace-nowrap" }, d["Mã số thuế"] || "—"),
+                        h("td", { className: "px-3 py-2 text-gray-800" }, d["Tên NNT"] || "—"),
+                        h("td", { className: "px-3 py-2 text-gray-700" }, d["Tên phòng"] || "—"),
+                        h("td", { className: "px-3 py-2 text-gray-700 whitespace-nowrap" }, d["CQT quản lý"] || "—")
+                      )
+                    )
+                  )
+                )
+          )
+        )
+      );
+    }
+
     // ====== NHÂN SỰ ======
     function NhanSuCard({ n }) {
       return h("div", { className: "bg-white rounded-xl shadow-sm hover:shadow-md transition p-4 flex gap-4" },
@@ -123,7 +197,7 @@
       );
     }
 
-    function NhanSuTable({ data }) {
+    function NhanSuTable({ data, onCanBoClick }) {
       return h("div", { className: "bg-white rounded-xl shadow-sm overflow-x-auto" },
         h("table", { className: "w-full text-sm" },
           h("thead", { className: "bg-gray-50 text-gray-600 uppercase text-xs" },
@@ -143,7 +217,13 @@
                       className: "w-9 h-9 rounded-full object-cover",
                       onError: (e) => { e.currentTarget.src = "https://via.placeholder.com/40"; },
                     }),
-                    h("span", { className: "font-medium text-gray-800 whitespace-nowrap" }, n.hoTen || "—")
+                    onCanBoClick
+                      ? h("button", {
+                          onClick: () => onCanBoClick(n.hoTen),
+                          className: "font-medium text-blue-600 hover:underline whitespace-nowrap",
+                          title: "Xem doanh nghiệp được quản lý",
+                        }, n.hoTen || "—")
+                      : h("span", { className: "font-medium text-gray-800 whitespace-nowrap" }, n.hoTen || "—")
                   )
                 ),
                 h("td", { className: "px-4 py-3 text-gray-700" }, n.chucVu || "—"),
@@ -161,9 +241,11 @@
 
     function NhanSuView() {
       const { data, loading, error } = useNhanSuData();
+      const dnData = useDoanhNghiepData(); // để click cán bộ xem DN quản lý
       const [keyword, setKeyword] = useState("");
       const [donViFilter, setDonViFilter] = useState("");
       const [viewMode, setViewMode] = useState("card");
+      const [selectedCanBo, setSelectedCanBo] = useState(null);
 
       const danhSachDonVi = useMemo(
         () => [...new Set(data.map((n) => n.donVi).filter(Boolean))],
@@ -220,7 +302,15 @@
             ? h("div", { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" },
                 filtered.map((n) => h(NhanSuCard, { key: n.id || n.hoTen, n }))
               )
-            : h(NhanSuTable, { data: filtered })
+            : h(NhanSuTable, { data: filtered, onCanBoClick: setSelectedCanBo }),
+
+        selectedCanBo
+          ? h(CanBoDetail, {
+              tenCanBo: selectedCanBo,
+              data: dnData.data,
+              onClose: () => setSelectedCanBo(null),
+            })
+          : null
       );
     }
 
@@ -278,6 +368,7 @@
       const [keyword, setKeyword] = useState("");
       const [cqtFilter, setCqtFilter] = useState("");
       const [canBoFilter, setCanBoFilter] = useState("");
+      const [selectedCanBo, setSelectedCanBo] = useState(null);
 
       const danhSachCQT = useMemo(
         () => [...new Set(data.map((d) => d["CQT quản lý"]).filter(Boolean))].sort(),
@@ -359,18 +450,34 @@
                       h("td", { className: "px-4 py-3 text-gray-700" }, d["Mã phòng quản lý"] || "—"),
                       h("td", { className: "px-4 py-3 text-gray-700" }, d["Tên phòng"] || "—"),
                       h("td", { className: "px-4 py-3 text-gray-700" }, d["Mã cán bộ"] || "—"),
-                      h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, d["Tên cán bộ quản lý"] || "—"),
-                      h("td", { className: "px-4 py-3 text-gray-700" }, d["Người tạo"] || d["Người tạo"] || "—"),
-                      h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, formatDate(d["Ngày tạo"] || d["Ngày tạo"])),
+                      h("td", { className: "px-4 py-3 whitespace-nowrap" },
+                        d["Tên cán bộ quản lý"]
+                          ? h("button", {
+                              onClick: () => setSelectedCanBo(d["Tên cán bộ quản lý"]),
+                              className: "text-blue-600 hover:underline font-medium",
+                              title: "Xem danh sách doanh nghiệp được quản lý",
+                            }, d["Tên cán bộ quản lý"])
+                          : "—"
+                      ),
+                      h("td", { className: "px-4 py-3 text-gray-700" }, getVal(d, "Người tạo", "Người tạo") || "—"),
+                      h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, formatDate(getVal(d, "Ngày tạo", "Ngày tạo"))),
                       h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, d["Thời gian tạo"] || "—"),
-                      h("td", { className: "px-4 py-3 text-gray-700" }, d["Thay đổi bởi"] || d["Thay đổi bởi"] || "—"),
+                      h("td", { className: "px-4 py-3 text-gray-700" }, getVal(d, "Thay đổi bởi", "Thay đổi bởi") || "—"),
                       h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, formatDate(d["Ngày thay đổi"])),
                       h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, d["Thời gian thay đổi"] || "—")
                     )
                   )
                 )
               )
-            )
+            ),
+
+        selectedCanBo
+          ? h(CanBoDetail, {
+              tenCanBo: selectedCanBo,
+              data,
+              onClose: () => setSelectedCanBo(null),
+            })
+          : null
       );
     }
 
