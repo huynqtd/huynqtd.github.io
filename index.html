@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Danh bạ nhân sự – QLDN2</title>
+  <title>Quản lý nhân sự & doanh nghiệp</title>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
@@ -14,12 +14,15 @@
 
   <script>
     const { useState, useEffect, useMemo } = React;
+    const h = React.createElement;
 
     // ====== CẤU HÌNH SHEET ======
     const SHEET_ID = "1wH_rQwpF2jRO_8s277hq_kmuN-i79JMzKqNx43XAK0Y";
-    const SHEET_GID = "557275852"; // tab QLDN2
-    const SHEET_CSV_URL =
-      `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
+    const GID_NHANSU = "557275852";   // tab QLDN2
+    const GID_DOANHNGHIEP = "869158415"; // tab DNphancong
+
+    const csvUrl = (gid) =>
+      `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
 
     // ====== TIỆN ÍCH ======
     const formatDate = (iso) => {
@@ -31,17 +34,17 @@
       return iso;
     };
 
-    // ====== HOOK ĐỌC DỮ LIỆU ======
-    function useNhanSuData() {
+    // Đọc CSV chung
+    function useSheetData(gid, { filterEmpty }) {
       const [data, setData] = useState([]);
       const [loading, setLoading] = useState(true);
       const [error, setError] = useState(null);
 
       useEffect(() => {
         let cancelled = false;
-        fetch(SHEET_CSV_URL)
+        fetch(csvUrl(gid))
           .then((res) => {
-            if (!res.ok) throw new Error(`HTTP ${res.status} – không tải được sheet`);
+            if (!res.ok) throw new Error(`HTTP ${res.status} – không tải được sheet (gid=${gid})`);
             return res.text();
           })
           .then((csv) => {
@@ -58,7 +61,7 @@
                 });
                 return o;
               })
-              .filter((r) => r.id || r.hoTen);
+              .filter(filterEmpty);
             if (cleaned.length === 0) {
               throw new Error("Không có dòng dữ liệu. Kiểm tra tên cột hoặc gid.");
             }
@@ -67,96 +70,87 @@
           .catch((e) => !cancelled && setError(e))
           .finally(() => !cancelled && setLoading(false));
         return () => { cancelled = true; };
-      }, []);
+      }, [gid]);
 
       return { data, loading, error };
     }
 
-    // ====== COMPONENT CARD ======
-    function CardView({ data }) {
-      return React.createElement(
-        "div",
-        { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" },
-        data.map((n) =>
-          React.createElement(
-            "div",
-            {
-              key: n.id || n.hoTen,
-              className: "bg-white rounded-xl shadow-sm hover:shadow-md transition p-4 flex gap-4",
-            },
-            React.createElement("img", {
-              src: n.avatar || "https://via.placeholder.com/80",
-              alt: n.hoTen,
-              className: "w-20 h-20 rounded-full object-cover border-2 border-blue-100 shrink-0",
-              onError: (e) => { e.currentTarget.src = "https://via.placeholder.com/80"; },
-            }),
-            React.createElement(
-              "div",
-              { className: "flex-1 min-w-0" },
-              React.createElement("h3", { className: "font-semibold text-gray-800 truncate" }, n.hoTen || "—"),
-              React.createElement("p", { className: "text-sm text-blue-600 font-medium" }, n.chucVu || "—"),
-              React.createElement("p", { className: "text-xs text-gray-500 mt-1" }, n.donVi || "—"),
-              React.createElement("p", { className: "text-xs text-gray-500" }, n.toNghiepVu || "—"),
-              React.createElement(
-                "div",
-                { className: "mt-2 text-xs text-gray-600 space-y-0.5" },
-                React.createElement("p", null, "📞 " + (n.soDienThoai || "—")),
-                React.createElement("p", null, "☎️ " + (n.phone_cq || "—")),
-                React.createElement("p", null, "🎂 " + formatDate(n.ngaySinh))
-              )
-            )
+    const useNhanSuData = () =>
+      useSheetData(GID_NHANSU, { filterEmpty: (r) => r.id || r.hoTen });
+
+    const useDoanhNghiepData = () =>
+      useSheetData(GID_DOANHNGHIEP, {
+        filterEmpty: (r) => r["Tên NNT"] || r["Mã cán bộ"],
+      });
+
+    // ====== COMPONENT DÙNG CHUNG ======
+    function Loading() {
+      return h("div", { className: "min-h-screen flex items-center justify-center text-gray-500" },
+        "Đang tải dữ liệu từ Google Sheet..."
+      );
+    }
+
+    function ErrorBox({ error }) {
+      return h("div", { className: "min-h-screen flex items-center justify-center p-4" },
+        h("div", { className: "bg-red-50 border border-red-200 text-red-700 rounded-lg p-6 max-w-lg" },
+          h("p", { className: "font-semibold mb-1" }, "Không tải được dữ liệu"),
+          h("p", { className: "text-sm" }, error.message)
+        )
+      );
+    }
+
+    // ====== NHÂN SỰ ======
+    function NhanSuCard({ n }) {
+      return h("div", { className: "bg-white rounded-xl shadow-sm hover:shadow-md transition p-4 flex gap-4" },
+        h("img", {
+          src: n.avatar || "https://via.placeholder.com/80",
+          alt: n.hoTen,
+          className: "w-20 h-20 rounded-full object-cover border-2 border-blue-100 shrink-0",
+          onError: (e) => { e.currentTarget.src = "https://via.placeholder.com/80"; },
+        }),
+        h("div", { className: "flex-1 min-w-0" },
+          h("h3", { className: "font-semibold text-gray-800 truncate" }, n.hoTen || "—"),
+          h("p", { className: "text-sm text-blue-600 font-medium" }, n.chucVu || "—"),
+          h("p", { className: "text-xs text-gray-500 mt-1" }, n.donVi || "—"),
+          h("p", { className: "text-xs text-gray-500" }, n.toNghiepVu || "—"),
+          h("div", { className: "mt-2 text-xs text-gray-600 space-y-0.5" },
+            h("p", null, "📞 " + (n.soDienThoai || "—")),
+            h("p", null, "☎️ " + (n.phone_cq || "—")),
+            h("p", null, "🎂 " + formatDate(n.ngaySinh))
           )
         )
       );
     }
 
-    // ====== COMPONENT TABLE ======
-    function TableView({ data }) {
-      return React.createElement(
-        "div",
-        { className: "bg-white rounded-xl shadow-sm overflow-x-auto" },
-        React.createElement(
-          "table",
-          { className: "w-full text-sm" },
-          React.createElement(
-            "thead",
-            { className: "bg-gray-50 text-gray-600 uppercase text-xs" },
-            React.createElement(
-              "tr",
-              null,
-              ["Nhân sự", "Chức vụ", "Đơn vị", "Tổ nghiệp vụ", "SĐT", "SĐT CQ", "Ngày sinh"].map((h) =>
-                React.createElement("th", { key: h, className: "px-4 py-3 text-left" }, h)
-              )
+    function NhanSuTable({ data }) {
+      return h("div", { className: "bg-white rounded-xl shadow-sm overflow-x-auto" },
+        h("table", { className: "w-full text-sm" },
+          h("thead", { className: "bg-gray-50 text-gray-600 uppercase text-xs" },
+            h("tr", null,
+              ["Nhân sự", "Chức vụ", "Đơn vị", "Tổ nghiệp vụ", "SĐT", "SĐT CQ", "Ngày sinh"].map((x) =>
+                h("th", { key: x, className: "px-4 py-3 text-left" }, x))
             )
           ),
-          React.createElement(
-            "tbody",
-            { className: "divide-y divide-gray-100" },
+          h("tbody", { className: "divide-y divide-gray-100" },
             data.map((n) =>
-              React.createElement(
-                "tr",
-                { key: n.id || n.hoTen, className: "hover:bg-gray-50" },
-                React.createElement(
-                  "td",
-                  { className: "px-4 py-3" },
-                  React.createElement(
-                    "div",
-                    { className: "flex items-center gap-3" },
-                    React.createElement("img", {
+              h("tr", { key: n.id || n.hoTen, className: "hover:bg-gray-50" },
+                h("td", { className: "px-4 py-3" },
+                  h("div", { className: "flex items-center gap-3" },
+                    h("img", {
                       src: n.avatar || "https://via.placeholder.com/40",
                       alt: n.hoTen,
                       className: "w-9 h-9 rounded-full object-cover",
                       onError: (e) => { e.currentTarget.src = "https://via.placeholder.com/40"; },
                     }),
-                    React.createElement("span", { className: "font-medium text-gray-800 whitespace-nowrap" }, n.hoTen || "—")
+                    h("span", { className: "font-medium text-gray-800 whitespace-nowrap" }, n.hoTen || "—")
                   )
                 ),
-                React.createElement("td", { className: "px-4 py-3 text-gray-700" }, n.chucVu || "—"),
-                React.createElement("td", { className: "px-4 py-3 text-gray-700" }, n.donVi || "—"),
-                React.createElement("td", { className: "px-4 py-3 text-gray-700" }, n.toNghiepVu || "—"),
-                React.createElement("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, n.soDienThoai || "—"),
-                React.createElement("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, n.phone_cq || "—"),
-                React.createElement("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, formatDate(n.ngaySinh))
+                h("td", { className: "px-4 py-3 text-gray-700" }, n.chucVu || "—"),
+                h("td", { className: "px-4 py-3 text-gray-700" }, n.donVi || "—"),
+                h("td", { className: "px-4 py-3 text-gray-700" }, n.toNghiepVu || "—"),
+                h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, n.soDienThoai || "—"),
+                h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, n.phone_cq || "—"),
+                h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, formatDate(n.ngaySinh))
               )
             )
           )
@@ -164,8 +158,7 @@
       );
     }
 
-    // ====== COMPONENT CHÍNH ======
-    function App() {
+    function NhanSuView() {
       const { data, loading, error } = useNhanSuData();
       const [keyword, setKeyword] = useState("");
       const [donViFilter, setDonViFilter] = useState("");
@@ -188,90 +181,178 @@
         });
       }, [data, keyword, donViFilter]);
 
-      if (loading) {
-        return React.createElement(
-          "div",
-          { className: "min-h-screen flex items-center justify-center text-gray-500" },
-          "Đang tải dữ liệu từ Google Sheet..."
-        );
-      }
+      if (loading) return h(Loading);
+      if (error) return h(ErrorBox, { error });
 
-      if (error) {
-        return React.createElement(
-          "div",
-          { className: "min-h-screen flex items-center justify-center p-4" },
-          React.createElement(
-            "div",
-            { className: "bg-red-50 border border-red-200 text-red-700 rounded-lg p-6 max-w-lg" },
-            React.createElement("p", { className: "font-semibold mb-1" }, "Không tải được dữ liệu"),
-            React.createElement("p", { className: "text-sm" }, error.message)
+      return h("div", { className: "max-w-6xl mx-auto" },
+        h("p", { className: "text-sm text-gray-500 mb-4" }, `Tổng: ${filtered.length} / ${data.length} nhân sự`),
+        h("div", { className: "flex flex-col md:flex-row gap-3 mb-6" },
+          h("input", {
+            type: "text",
+            placeholder: "Tìm theo tên, chức vụ, SĐT...",
+            value: keyword,
+            onChange: (e) => setKeyword(e.target.value),
+            className: "flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400",
+          }),
+          h("select", {
+            value: donViFilter,
+            onChange: (e) => setDonViFilter(e.target.value),
+            className: "px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400",
+          },
+            h("option", { value: "" }, "Tất cả đơn vị"),
+            danhSachDonVi.map((dv) => h("option", { key: dv, value: dv }, dv))
+          ),
+          h("div", { className: "flex rounded-lg overflow-hidden border border-gray-300" },
+            h("button", {
+              onClick: () => setViewMode("card"),
+              className: `px-4 py-2 text-sm ${viewMode === "card" ? "bg-blue-600 text-white" : "bg-white text-gray-700"}`,
+            }, "Thẻ"),
+            h("button", {
+              onClick: () => setViewMode("table"),
+              className: `px-4 py-2 text-sm ${viewMode === "table" ? "bg-blue-600 text-white" : "bg-white text-gray-700"}`,
+            }, "Bảng")
           )
-        );
-      }
+        ),
+        filtered.length === 0
+          ? h("div", { className: "text-center text-gray-500 py-12" }, "Không tìm thấy nhân sự phù hợp.")
+          : viewMode === "card"
+            ? h("div", { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" },
+                filtered.map((n) => h(NhanSuCard, { key: n.id || n.hoTen, n }))
+              )
+            : h(NhanSuTable, { data: filtered })
+      );
+    }
 
-      return React.createElement(
-        "div",
-        { className: "min-h-screen p-6" },
-        React.createElement(
-          "div",
-          { className: "max-w-6xl mx-auto" },
-          React.createElement("h1", { className: "text-2xl font-bold text-gray-800 mb-1" }, "Danh bạ nhân sự – QLDN2"),
-          React.createElement("p", { className: "text-sm text-gray-500 mb-4" }, `Tổng: ${filtered.length} / ${data.length} nhân sự`),
+    // ====== DOANH NGHIỆP ======
+    function DoanhNghiepView() {
+      const { data, loading, error } = useDoanhNghiepData();
+      const [keyword, setKeyword] = useState("");
+      const [cqtFilter, setCqtFilter] = useState("");
+      const [canBoFilter, setCanBoFilter] = useState("");
 
-          // Toolbar
-          React.createElement(
-            "div",
-            { className: "flex flex-col md:flex-row gap-3 mb-6" },
-            React.createElement("input", {
-              type: "text",
-              placeholder: "Tìm theo tên, chức vụ, SĐT...",
-              value: keyword,
-              onChange: (e) => setKeyword(e.target.value),
-              className: "flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400",
-            }),
-            React.createElement(
-              "select",
-              {
-                value: donViFilter,
-                onChange: (e) => setDonViFilter(e.target.value),
-                className: "px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400",
-              },
-              React.createElement("option", { value: "" }, "Tất cả đơn vị"),
-              danhSachDonVi.map((dv) => React.createElement("option", { key: dv, value: dv }, dv))
-            ),
-            React.createElement(
-              "div",
-              { className: "flex rounded-lg overflow-hidden border border-gray-300" },
-              React.createElement(
-                "button",
-                {
-                  onClick: () => setViewMode("card"),
-                  className: `px-4 py-2 text-sm ${viewMode === "card" ? "bg-blue-600 text-white" : "bg-white text-gray-700"}`,
-                },
-                "Thẻ"
-              ),
-              React.createElement(
-                "button",
-                {
-                  onClick: () => setViewMode("table"),
-                  className: `px-4 py-2 text-sm ${viewMode === "table" ? "bg-blue-600 text-white" : "bg-white text-gray-700"}`,
-                },
-                "Bảng"
+      const danhSachCQT = useMemo(
+        () => [...new Set(data.map((d) => d["CQT quản lý"]).filter(Boolean))].sort(),
+        [data]
+      );
+      const danhSachCanBo = useMemo(
+        () => [...new Set(data.map((d) => d["Tên cán bộ"]).filter(Boolean))].sort(),
+        [data]
+      );
+
+      const filtered = useMemo(() => {
+        const kw = keyword.toLowerCase();
+        return data.filter((d) => {
+          const matchKeyword =
+            (d["Tên NNT"] || "").toLowerCase().includes(kw) ||
+            (d["Mã cán bộ"] || "").toLowerCase().includes(kw) ||
+            (d["Tên cán bộ"] || "").toLowerCase().includes(kw) ||
+            (d["Tên phòng"] || "").toLowerCase().includes(kw);
+          const matchCQT = cqtFilter ? d["CQT quản lý"] === cqtFilter : true;
+          const matchCanBo = canBoFilter ? d["Tên cán bộ"] === canBoFilter : true;
+          return matchKeyword && matchCQT && matchCanBo;
+        });
+      }, [data, keyword, cqtFilter, canBoFilter]);
+
+      if (loading) return h(Loading);
+      if (error) return h(ErrorBox, { error });
+
+      return h("div", { className: "max-w-7xl mx-auto" },
+        h("p", { className: "text-sm text-gray-500 mb-4" }, `Tổng: ${filtered.length} / ${data.length} doanh nghiệp`),
+        h("div", { className: "flex flex-col md:flex-row gap-3 mb-6" },
+          h("input", {
+            type: "text",
+            placeholder: "Tìm theo tên NNT, mã/tên cán bộ, phòng...",
+            value: keyword,
+            onChange: (e) => setKeyword(e.target.value),
+            className: "flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400",
+          }),
+          h("select", {
+            value: cqtFilter,
+            onChange: (e) => setCqtFilter(e.target.value),
+            className: "px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400",
+          },
+            h("option", { value: "" }, "Tất cả CQT"),
+            danhSachCQT.map((x) => h("option", { key: x, value: x }, x))
+          ),
+          h("select", {
+            value: canBoFilter,
+            onChange: (e) => setCanBoFilter(e.target.value),
+            className: "px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400",
+          },
+            h("option", { value: "" }, "Tất cả cán bộ"),
+            danhSachCanBo.map((x) => h("option", { key: x, value: x }, x))
+          )
+        ),
+        filtered.length === 0
+          ? h("div", { className: "text-center text-gray-500 py-12" }, "Không tìm thấy doanh nghiệp phù hợp.")
+          : h("div", { className: "bg-white rounded-xl shadow-sm overflow-x-auto" },
+              h("table", { className: "w-full text-sm" },
+                h("thead", { className: "bg-gray-50 text-gray-600 uppercase text-xs" },
+                  h("tr", null,
+                    [
+                      "CQT quản lý",
+                      "Tên NNT",
+                      "Mã phòng",
+                      "Tên phòng",
+                      "Mã cán bộ",
+                      "Tên cán bộ",
+                      "Người tạo",
+                      "Ngày tạo",
+                      "Thời gian tạo",
+                    ].map((x) => h("th", { key: x, className: "px-4 py-3 text-left whitespace-nowrap" }, x))
+                  )
+                ),
+                h("tbody", { className: "divide-y divide-gray-100" },
+                  filtered.map((d, i) =>
+                    h("tr", { key: i, className: "hover:bg-gray-50" },
+                      h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, d["CQT quản lý"] || "—"),
+                      h("td", { className: "px-4 py-3 font-medium text-gray-800" }, d["Tên NNT"] || "—"),
+                      h("td", { className: "px-4 py-3 text-gray-700" }, d["Mã phòng quản lý"] || "—"),
+                      h("td", { className: "px-4 py-3 text-gray-700" }, d["Tên phòng"] || "—"),
+                      h("td", { className: "px-4 py-3 text-gray-700" }, d["Mã cán bộ"] || "—"),
+                      h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, d["Tên cán bộ"] || "—"),
+                      h("td", { className: "px-4 py-3 text-gray-700" }, d["Người tạo"] || "—"),
+                      h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, formatDate(d["Ngày tạo"])),
+                      h("td", { className: "px-4 py-3 text-gray-700 whitespace-nowrap" }, d["Thời gian tạo"] || "—")
+                    )
+                  )
+                )
               )
             )
-          ),
+      );
+    }
 
-          // Nội dung
-          filtered.length === 0
-            ? React.createElement("div", { className: "text-center text-gray-500 py-12" }, "Không tìm thấy nhân sự phù hợp.")
-            : viewMode === "card"
-            ? React.createElement(CardView, { data: filtered })
-            : React.createElement(TableView, { data: filtered })
+    // ====== APP ======
+    function App() {
+      const [tab, setTab] = useState("nhansu");
+
+      return h("div", { className: "min-h-screen p-6" },
+        h("div", { className: "max-w-7xl mx-auto" },
+          h("h1", { className: "text-2xl font-bold text-gray-800 mb-4" }, "Quản lý nhân sự & doanh nghiệp"),
+          h("div", { className: "flex gap-2 mb-6 border-b border-gray-200" },
+            h("button", {
+              onClick: () => setTab("nhansu"),
+              className: `px-4 py-2 text-sm font-medium border-b-2 ${
+                tab === "nhansu"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`,
+            }, "Nhân sự (QLDN2)"),
+            h("button", {
+              onClick: () => setTab("doanhnghiep"),
+              className: `px-4 py-2 text-sm font-medium border-b-2 ${
+                tab === "doanhnghiep"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`,
+            }, "Doanh nghiệp (DNphancong)")
+          ),
+          tab === "nhansu" ? h(NhanSuView) : h(DoanhNghiepView)
         )
       );
     }
 
-    ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+    ReactDOM.createRoot(document.getElementById("root")).render(h(App));
   </script>
 </body>
 </html>
