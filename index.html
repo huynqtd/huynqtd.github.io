@@ -109,6 +109,18 @@
       return key ? d[key] : "";
     };
 
+    // Xếp hạng chức vụ để sắp xếp nhân sự
+    const getChucVuRank = (chucVu) => {
+      const cv = (chucVu || "").toLowerCase().trim();
+      if (cv.includes("trưởng phòng")) return 1;
+      if (cv.includes("phó phòng")) return 2;
+      if (cv.includes("chuyên viên chính")) return 3;
+      if (cv.includes("kiểm tra viên chính")) return 4;
+      if (cv.includes("chuyên viên")) return 5;
+      if (cv.includes("kiểm tra viên")) return 6;
+      return 99; // các chức vụ khác xếp cuối
+    };
+
     // ====== HOOK ======
     function useSheetData(gid, { filterEmpty }) {
       const [data, setData] = useState([]);
@@ -361,16 +373,27 @@
         () => [...new Set(data.map((n) => n.donVi).filter(Boolean))],
         [data]
       );
+
+      // Sắp xếp theo chức vụ trước, rồi mới lọc
+      const sorted = useMemo(() => {
+        return [...data].sort((a, b) => {
+          const ra = getChucVuRank(a.chucVu);
+          const rb = getChucVuRank(b.chucVu);
+          if (ra !== rb) return ra - rb;
+          return (a.hoTen || "").localeCompare(b.hoTen || "", "vi");
+        });
+      }, [data]);
+
       const filtered = useMemo(() => {
         const kw = keyword.toLowerCase();
-        return data.filter((n) => {
+        return sorted.filter((n) => {
           const okKw =
             (n.hoTen || "").toLowerCase().includes(kw) ||
             (n.chucVu || "").toLowerCase().includes(kw) ||
             (n.soDienThoai || "").includes(keyword);
           return okKw && (donViFilter ? n.donVi === donViFilter : true);
         });
-      }, [data, keyword, donViFilter]);
+      }, [sorted, keyword, donViFilter]);
 
       if (loading) return h(TableSkeleton);
       if (error) return h(ErrorBox, { error });
