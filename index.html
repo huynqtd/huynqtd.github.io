@@ -3,41 +3,175 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="description" content="Hệ thống tra cứu nhân sự và doanh nghiệp - Phòng Quản lý Hỗ trợ Doanh nghiệp số 2" />
+  <meta name="theme-color" content="#1f4de0" />
   <title>Phòng Quản lý Hỗ trợ DN số 2</title>
-  
-  <!-- Thư viện ngoài -->
+
+  <!-- ====== FAVICON (tùy chọn, dùng emoji làm icon) ====== -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏢</text></svg>" />
+
+  <!-- ====== THƯ VIỆN BÊN NGOÀI ====== -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-  
+
+  <!-- ====== CẤU HÌNH TAILWIND ====== -->
   <script>
     tailwind.config = {
       theme: {
         extend: {
-          colors: { brand: { 50: "#eef4ff", 100: "#d9e6ff", 200: "#bcd3ff", 300: "#8eb5ff", 400: "#598cff", 500: "#3366ff", 600: "#1f4de0", 700: "#1a3fb8", 800: "#1a3894", 900: "#1b3375" } },
-          boxShadow: { card: "0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.1)", pop: "0 10px 30px rgba(16,24,40,.15)" },
-          keyframes: { fadeIn: { "0%": { opacity: 0 }, "100%": { opacity: 1 } }, slideUp: { "0%": { opacity: 0, transform: "translateY(12px)" }, "100%": { opacity: 1, transform: "translateY(0)" } }, bounceIn: { "0%": { transform: "scale(.95)", opacity: 0 }, "60%": { transform: "scale(1.02)" }, "100%": { transform: "scale(1)", opacity: 1 } } },
-          animation: { fadeIn: "fadeIn .15s ease-out", slideUp: "slideUp .2s ease-out", bounceIn: "bounceIn .3s ease-out" }
-        }
-      }
+          colors: {
+            brand: {
+              50: "#eef4ff",
+              100: "#d9e6ff",
+              200: "#bcd3ff",
+              300: "#8eb5ff",
+              400: "#598cff",
+              500: "#3366ff",
+              600: "#1f4de0",
+              700: "#1a3fb8",
+              800: "#1a3894",
+              900: "#1b3375",
+            },
+          },
+          boxShadow: {
+            card: "0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.1)",
+            pop: "0 10px 30px rgba(16,24,40,.15)",
+          },
+          keyframes: {
+            fadeIn: {
+              "0%": { opacity: 0 },
+              "100%": { opacity: 1 },
+            },
+            slideUp: {
+              "0%": { opacity: 0, transform: "translateY(12px)" },
+              "100%": { opacity: 1, transform: "translateY(0)" },
+            },
+            bounceIn: {
+              "0%": { transform: "scale(.95)", opacity: 0 },
+              "60%": { transform: "scale(1.02)" },
+              "100%": { transform: "scale(1)", opacity: 1 },
+            },
+          },
+          animation: {
+            fadeIn: "fadeIn .15s ease-out",
+            slideUp: "slideUp .2s ease-out",
+            bounceIn: "bounceIn .3s ease-out",
+          },
+        },
+      },
     };
   </script>
+
+  <!-- ====== CSS TÙY CHỈNH ====== -->
   <style>
-    /* CSS giữ nguyên như cũ */
-    .skeleton { position: relative; overflow: hidden; background: #e5e7eb; }
-    .skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255,255,255,.6), transparent); animation: shimmer 1.2s infinite; }
-    @keyframes shimmer { 100% { transform: translateX(100%); } }
-    ::-webkit-scrollbar { height: 6px; width: 6px; }
-    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    /* Skeleton loading shimmer */
+    .skeleton {
+      position: relative;
+      overflow: hidden;
+      background: #e5e7eb;
+    }
+    .skeleton::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      transform: translateX(-100%);
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+      animation: shimmer 1.2s infinite;
+    }
+    @keyframes shimmer {
+      100% {
+        transform: translateX(100%);
+      }
+    }
+
+    /* Scrollbar tùy chỉnh */
+    ::-webkit-scrollbar {
+      height: 6px;
+      width: 6px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    /* Chống zoom trên iOS khi focus vào input */
+    @media (max-width: 768px) {
+      input,
+      select,
+      textarea {
+        font-size: 16px !important;
+      }
+    }
+
+    /* Loại bỏ highlight xanh khi tap trên mobile */
+    * {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Cải thiện font hiển thị trên mobile */
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+        "Noto Sans", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Fallback nếu JS chưa load xong */
+    #loading-fallback {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      flex-direction: column;
+      gap: 12px;
+    }
+    #loading-fallback .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid #d9e6ff;
+      border-top-color: #1f4de0;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased">
-  <div id="root"></div>
+  <!-- ====== ROOT CHO REACT ====== -->
+  <div id="root">
+    <!-- Fallback hiển thị khi JS chưa kịp load -->
+    <div id="loading-fallback">
+      <div class="spinner"></div>
+      <p style="color: #64748b; font-size: 14px">Đang tải dữ liệu...</p>
+    </div>
+  </div>
 
-  <!-- Nhúng các file JS tự viết -->
+  <!-- ====== FILE JS NỘI BỘ (đặt cuối để DOM sẵn sàng) ====== -->
   <script src="config.js"></script>
   <script src="hooks.js"></script>
   <script src="components.js"></script>
+
+  <!-- ====== BẢO HIỂM: Nếu React không render được sau 10s, hiện thông báo ====== -->
+  <script>
+    setTimeout(function () {
+      var root = document.getElementById("root");
+      var fallback = document.getElementById("loading-fallback");
+      if (fallback && fallback.parentNode === root) {
+        fallback.innerHTML =
+          '<p style="color: #dc2626; font-size: 14px; text-align: center; padding: 0 20px;">' +
+          "Không tải được ứng dụng.<br>Vui lòng kiểm tra kết nối mạng và tải lại trang." +
+          "</p>";
+      }
+    }, 10000);
+  </script>
 </body>
 </html>
