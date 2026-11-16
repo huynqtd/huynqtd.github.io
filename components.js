@@ -15,7 +15,6 @@
     formatDate,
     normalizeTen,
     getMST,
-    getVal,
     getChucVuRank,
     normalizeMST,
     isBirthdayToday,
@@ -25,7 +24,7 @@
   } = window;
 
   // ============================================================
-  // UI PRIMITIVES
+  // 1. UI PRIMITIVES
   // ============================================================
   const Badge = ({ children, color = "slate" }) => {
     const map = {
@@ -88,15 +87,14 @@
   }
 
   // ============================================================
-  // BANNER SINH NHẬT
+  // 2. BANNER SINH NHẬT
   // ============================================================
   function BirthdayBanner({ nhanSu }) {
     const [dismissed, setDismissed] = useState(false);
 
-    const todayList = useMemo(
-      () => nhanSu.filter((n) => isBirthdayToday(n.ngaySinh)),
-      [nhanSu]
-    );
+    const todayList = useMemo(() => {
+      return nhanSu.filter((n) => isBirthdayToday(n.ngaySinh));
+    }, [nhanSu]);
 
     const upcomingList = useMemo(() => {
       return nhanSu
@@ -107,10 +105,13 @@
 
     useEffect(() => { setDismissed(false); }, [todayList.length]);
 
-    if (todayList.length === 0 && upcomingList.length === 0) return null;
+    if (todayList.length === 0 && upcomingList.length === 0) {
+      return null;
+    }
 
     const today = getTodayParts();
 
+    // Trường hợp 1: Có sinh nhật hôm nay
     if (todayList.length > 0 && !dismissed) {
       return h("div", {
         className: "relative overflow-hidden rounded-2xl mb-5 p-4 sm:p-5 bg-gradient-to-r from-pink-500 via-rose-500 to-amber-400 text-white shadow-pop animate-bounceIn",
@@ -124,9 +125,7 @@
               h("span", { className: "text-[10px] sm:text-xs bg-white/20 px-2 py-0.5 rounded-full" }, `Hôm nay ${today.d}/${today.m}`)
             ),
             h("p", { className: "text-xs sm:text-sm text-white/90 mt-0.5" },
-              todayList.length === 1
-                ? "Hôm nay có 1 đồng nghiệp kỷ niệm ngày sinh:"
-                : `Hôm nay có ${todayList.length} đồng nghiệp kỷ niệm ngày sinh:`
+              todayList.length === 1 ? "Hôm nay có 1 đồng nghiệp kỷ niệm ngày sinh:" : `Hôm nay có ${todayList.length} đồng nghiệp kỷ niệm ngày sinh:`
             ),
             h("div", { className: "mt-3 flex flex-wrap gap-2" },
               todayList.map((n, i) =>
@@ -148,6 +147,7 @@
       );
     }
 
+    // Trường hợp 2: Không có hôm nay, nhưng có sắp tới trong 7 ngày
     if (upcomingList.length > 0) {
       return h("div", { className: "bg-blue-50 border border-blue-100 rounded-xl p-3 mb-4 flex items-center gap-3 text-sm text-blue-800 shadow-sm" },
         h("span", { className: "text-lg" }, "🗓️"),
@@ -163,19 +163,20 @@
         )
       );
     }
+
     return null;
   }
 
   // ============================================================
-  // MODAL CÁN BỘ
+  // 3. MODAL CHI TIẾT CÁN BỘ
   // ============================================================
   function CanBoDetail({ tenCanBo, data, onClose }) {
-    const dsQuanLy = useMemo(
-      () => data.filter((d) => normalizeTen(d["Tên cán bộ quản lý"]) === normalizeTen(tenCanBo)),
-      [data, tenCanBo]
-    );
+    const dsQuanLy = useMemo(() => {
+      return data.filter((d) => normalizeTen(d["Tên cán bộ quản lý"]) === normalizeTen(tenCanBo));
+    }, [data, tenCanBo]);
+
     useEffect(() => {
-      const onKey = (e) => e.key === "Escape" && onClose();
+      const onKey = (e) => { if (e.key === "Escape") onClose(); };
       window.addEventListener("keydown", onKey);
       return () => window.removeEventListener("keydown", onKey);
     }, [onClose]);
@@ -194,9 +195,7 @@
             h("div", null,
               h("h2", { className: "text-base sm:text-lg font-semibold text-slate-800" }, tenCanBo || "—"),
               h("p", { className: "text-xs sm:text-sm text-slate-500" },
-                "Đang quản lý ",
-                h("span", { className: "font-semibold text-brand-700" }, dsQuanLy.length),
-                " DN"
+                "Đang quản lý ", h("span", { className: "font-semibold text-brand-700" }, dsQuanLy.length), " DN"
               )
             )
           ),
@@ -235,15 +234,13 @@
   }
 
   // ============================================================
-  // NHÂN SỰ
+  // 4. NHÂN SỰ (CARD & TABLE)
   // ============================================================
   function NhanSuCard({ n, onClick }) {
-    const chucVuColor = /trưởng|phó|giám đốc/i.test(n.chucVu || "")
-      ? "blue"
-      : /chuyên viên|kiểm tra/i.test(n.chucVu || "")
-      ? "green"
-      : "slate";
     const isBday = isBirthdayToday(n.ngaySinh);
+    let chucVuColor = "slate";
+    if (/trưởng|phó|giám đốc/i.test(n.chucVu || "")) chucVuColor = "blue";
+    else if (/chuyên viên|kiểm tra/i.test(n.chucVu || "")) chucVuColor = "green";
 
     return h("div", {
       onClick,
@@ -253,9 +250,7 @@
     },
       h("div", { className: "relative shrink-0 mt-1" },
         h(Avatar, { src: n.avatar, name: n.hoTen, size: 52 }),
-        isBday
-          ? h("span", { className: "absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-pink-500 text-white text-[10px] flex items-center justify-center shadow-card ring-2 ring-white" }, "🎂")
-          : null
+        isBday ? h("span", { className: "absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-pink-500 text-white text-[10px] flex items-center justify-center shadow-card ring-2 ring-white" }, "🎂") : null
       ),
       h("div", { className: "flex-1 min-w-0" },
         h("div", { className: "flex flex-col sm:flex-row sm:items-start justify-between gap-1 sm:gap-2" },
@@ -289,28 +284,19 @@
           h("tbody", { className: "divide-y divide-slate-100" },
             data.map((n) => {
               const isBday = isBirthdayToday(n.ngaySinh);
-              return h("tr", {
-                key: n.id || n.hoTen,
-                className: `hover:bg-slate-50 ${isBday ? "bg-pink-50/50" : ""}`,
-              },
+              return h("tr", { key: n.id || n.hoTen, className: `hover:bg-slate-50 ${isBday ? "bg-pink-50/50" : ""}` },
                 h("td", { className: "px-3 sm:px-4 py-3" },
                   h("div", { className: "flex items-center gap-2 sm:gap-3" },
                     h(Avatar, { src: n.avatar, name: n.hoTen, size: 32 }),
                     onCanBoClick
-                      ? h("button", {
-                          onClick: () => onCanBoClick(n.hoTen),
-                          className: "font-medium text-brand-700 hover:underline text-left line-clamp-2",
-                          title: "Xem doanh nghiệp được quản lý",
-                        }, n.hoTen || "—")
+                      ? h("button", { onClick: () => onCanBoClick(n.hoTen), className: "font-medium text-brand-700 hover:underline text-left line-clamp-2" }, n.hoTen || "—")
                       : h("span", { className: "font-medium text-slate-800 line-clamp-2" }, n.hoTen || "—"),
                     isBday ? h("span", null, "🎂") : null
                   )
                 ),
                 h("td", { className: "px-3 sm:px-4 py-3 text-slate-700" }, n.chucVu || "—"),
                 h("td", { className: "px-3 sm:px-4 py-3 text-slate-700 whitespace-nowrap" }, n.soDienThoai || "—"),
-                h("td", { className: `px-3 sm:px-4 py-3 whitespace-nowrap ${isBday ? "text-pink-600 font-bold" : "text-slate-700"}` },
-                  formatDate(n.ngaySinh)
-                )
+                h("td", { className: `px-3 sm:px-4 py-3 whitespace-nowrap ${isBday ? "text-pink-600 font-bold" : "text-slate-700"}` }, formatDate(n.ngaySinh))
               );
             })
           )
@@ -319,6 +305,9 @@
     );
   }
 
+  // ============================================================
+  // 5. NHÂN SỰ VIEW
+  // ============================================================
   function NhanSuView({ dnData }) {
     const { data, loading, error } = window.useNhanSuData();
     const [keyword, setKeyword] = useState("");
@@ -326,10 +315,7 @@
     const [viewMode, setViewMode] = useState("card");
     const [selectedCanBo, setSelectedCanBo] = useState(null);
 
-    const danhSachDonVi = useMemo(
-      () => [...new Set(data.map((n) => n.donVi).filter(Boolean))],
-      [data]
-    );
+    const danhSachDonVi = useMemo(() => [...new Set(data.map((n) => n.donVi).filter(Boolean))], [data]);
 
     const sorted = useMemo(() => {
       return [...data].sort((a, b) => {
@@ -346,10 +332,7 @@
     const filtered = useMemo(() => {
       const kw = keyword.toLowerCase();
       return sorted.filter((n) => {
-        const okKw =
-          (n.hoTen || "").toLowerCase().includes(kw) ||
-          (n.chucVu || "").toLowerCase().includes(kw) ||
-          (n.soDienThoai || "").includes(keyword);
+        const okKw = (n.hoTen || "").toLowerCase().includes(kw) || (n.chucVu || "").toLowerCase().includes(kw) || (n.soDienThoai || "").includes(keyword);
         return okKw && (donViFilter ? n.donVi === donViFilter : true);
       });
     }, [sorted, keyword, donViFilter]);
@@ -357,24 +340,19 @@
     if (loading) return h(TableSkeleton);
     if (error) return h(ErrorBox, { error });
 
-    let mainContent;
+    // Render danh sách (Tách khỏi ternary để tránh lỗi ngoặc)
+    let listUI = null;
     if (filtered.length === 0) {
-      mainContent = h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 py-12 text-center" },
+      listUI = h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 py-12 text-center" },
         h("div", { className: "text-3xl mb-2" }, "🔍"),
         h("p", { className: "text-sm text-slate-600 font-medium" }, "Không tìm thấy nhân sự")
       );
     } else if (viewMode === "card") {
-      mainContent = h("div", { className: "grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3" },
-        filtered.map((n) =>
-          h(NhanSuCard, {
-            key: n.id || n.hoTen,
-            n,
-            onClick: () => setSelectedCanBo(n.hoTen),
-          })
-        )
+      listUI = h("div", { className: "grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3" },
+        filtered.map((n) => h(NhanSuCard, { key: n.id || n.hoTen, n, onClick: () => setSelectedCanBo(n.hoTen) }))
       );
     } else {
-      mainContent = h(NhanSuTable, { data: filtered, onCanBoClick: setSelectedCanBo });
+      listUI = h(NhanSuTable, { data: filtered, onCanBoClick: setSelectedCanBo });
     }
 
     return h("div", null,
@@ -419,20 +397,14 @@
         )
       ),
 
-      mainContent,
+      listUI,
 
-      selectedCanBo
-        ? h(CanBoDetail, {
-            tenCanBo: selectedCanBo,
-            data: dnData,
-            onClose: () => setSelectedCanBo(null),
-          })
-        : null
+      selectedCanBo ? h(CanBoDetail, { tenCanBo: selectedCanBo, data: dnData, onClose: () => setSelectedCanBo(null) }) : null
     );
   }
 
   // ============================================================
-  // TRA CỨU MST
+  // 6. TRA CỨU MST & DOANH NGHIỆP VIEW
   // ============================================================
   function TraCuuMST({ data }) {
     const [mst, setMst] = useState("");
@@ -442,14 +414,12 @@
       return data.filter((d) => normalizeMST(getMST(d)).includes(key));
     }, [mst, data]);
 
-    let body = null;
+    let bodyUI = null;
     if (ketQua !== null) {
       if (ketQua.length === 0) {
-        body = h("div", { className: "mt-3 text-xs sm:text-sm bg-rose-500/20 ring-1 ring-rose-300/40 rounded-lg p-2.5" },
-          `Không tìm thấy MST "${mst}".`
-        );
+        bodyUI = h("div", { className: "mt-3 text-xs sm:text-sm bg-rose-500/20 ring-1 ring-rose-300/40 rounded-lg p-2.5" }, `Không tìm thấy MST "${mst}".`);
       } else {
-        body = h("div", { className: "mt-3 space-y-2 sm:space-y-3" },
+        bodyUI = h("div", { className: "mt-3 space-y-2 sm:space-y-3" },
           ketQua.map((d, i) =>
             h("div", { key: i, className: "bg-white text-slate-800 rounded-xl p-3 sm:p-4 shadow-card" },
               h("div", { className: "flex flex-wrap items-center justify-between gap-2" },
@@ -488,31 +458,22 @@
         onChange: (e) => setMst(e.target.value),
         className: "w-full px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg bg-white/95 text-slate-800 placeholder-slate-400 outline-none focus:ring-2 focus:ring-white/60 text-sm",
       }),
-      body
+      bodyUI
     );
   }
 
-  // ============================================================
-  // DOANH NGHIỆP
-  // ============================================================
   function DoanhNghiepView({ dnData, dnLoading, dnError }) {
     const data = dnData;
     const [keyword, setKeyword] = useState("");
     const [cqtFilter, setCqtFilter] = useState("");
     const [selectedCanBo, setSelectedCanBo] = useState(null);
 
-    const danhSachCQT = useMemo(
-      () => [...new Set(data.map((d) => d["CQT quản lý"]).filter(Boolean))].sort(),
-      [data]
-    );
+    const danhSachCQT = useMemo(() => [...new Set(data.map((d) => d["CQT quản lý"]).filter(Boolean))].sort(), [data]);
 
     const filtered = useMemo(() => {
       const kw = keyword.toLowerCase();
       return data.filter((d) => {
-        const okKw =
-          (d["Tên NNT"] || "").toLowerCase().includes(kw) ||
-          (getMST(d) || "").toLowerCase().includes(kw) ||
-          (d["Tên cán bộ quản lý"] || "").toLowerCase().includes(kw);
+        const okKw = (d["Tên NNT"] || "").toLowerCase().includes(kw) || (getMST(d) || "").toLowerCase().includes(kw) || (d["Tên cán bộ quản lý"] || "").toLowerCase().includes(kw);
         return okKw && (cqtFilter ? d["CQT quản lý"] === cqtFilter : true);
       });
     }, [data, keyword, cqtFilter]);
@@ -520,13 +481,13 @@
     if (dnLoading) return h(TableSkeleton);
     if (dnError) return h(ErrorBox, { error: dnError });
 
-    let mainTable;
+    let tableUI = null;
     if (filtered.length === 0) {
-      mainTable = h("div", { className: "bg-white rounded-xl shadow-card py-12 text-center" },
+      tableUI = h("div", { className: "bg-white rounded-xl shadow-card py-12 text-center" },
         h("p", { className: "text-sm text-slate-600" }, "Không tìm thấy dữ liệu.")
       );
     } else {
-      mainTable = h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 overflow-hidden" },
+      tableUI = h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 overflow-hidden" },
         h("div", { className: "overflow-x-auto" },
           h("table", { className: "w-full text-sm" },
             h("thead", { className: "bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wide" },
@@ -543,10 +504,7 @@
                   h("td", { className: "px-3 sm:px-4 py-3 font-medium text-slate-800 min-w-[150px]" }, d["Tên NNT"] || "—"),
                   h("td", { className: "px-3 sm:px-4 py-3 whitespace-nowrap" },
                     d["Tên cán bộ quản lý"]
-                      ? h("button", {
-                          onClick: () => setSelectedCanBo(d["Tên cán bộ quản lý"]),
-                          className: "text-brand-700 hover:underline font-medium",
-                        }, d["Tên cán bộ quản lý"])
+                      ? h("button", { onClick: () => setSelectedCanBo(d["Tên cán bộ quản lý"]), className: "text-brand-700 hover:underline font-medium" }, d["Tên cán bộ quản lý"])
                       : "—"
                   )
                 )
@@ -583,19 +541,13 @@
           danhSachCQT.map((x) => h("option", { key: x, value: x }, x))
         )
       ),
-      mainTable,
-      selectedCanBo
-        ? h(CanBoDetail, {
-            tenCanBo: selectedCanBo,
-            data,
-            onClose: () => setSelectedCanBo(null),
-          })
-        : null
+      tableUI,
+      selectedCanBo ? h(CanBoDetail, { tenCanBo: selectedCanBo, data, onClose: () => setSelectedCanBo(null) }) : null
     );
   }
 
   // ============================================================
-  // HEADER & APP
+  // 7. HEADER & APP
   // ============================================================
   function Header({ tab, setTab }) {
     const tabs = [
@@ -635,16 +587,13 @@
   function App() {
     const [tab, setTab] = useState("nhansu");
     const dn = window.useDoanhNghiepData();
+    
     return h("div", { className: "min-h-screen flex flex-col" },
       h(Header, { tab, setTab }),
       h("main", { className: "flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6" },
         tab === "nhansu"
           ? h(NhanSuView, { dnData: dn.data })
-          : h(DoanhNghiepView, {
-              dnData: dn.data,
-              dnLoading: dn.loading,
-              dnError: dn.error,
-            })
+          : h(DoanhNghiepView, { dnData: dn.data, dnLoading: dn.loading, dnError: dn.error })
       ),
       h("footer", { className: "border-t border-slate-200 bg-white" },
         h("div", { className: "max-w-7xl mx-auto px-3 sm:px-6 py-3 text-[10px] sm:text-xs text-slate-500 flex items-center justify-between" },
