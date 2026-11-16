@@ -61,15 +61,8 @@
   // ============================================================
   function getMST(d) {
     const candidates = [
-      "Mã số thuế",
-      "MST",
-      "Mã Số Thuế",
-      "Ma so thue",
-      "Mã số thuế (MST)",
-      "Số thuế",
-      "Tax Code",
-      "MST/NNT",
-      "Mã số thuế NNT",
+      "Mã số thuế", "MST", "Mã Số Thuế", "Ma so thue", "Mã số thuế (MST)",
+      "Số thuế", "Tax Code", "MST/NNT", "Mã số thuế NNT",
     ];
     for (const k of candidates) {
       if (d[k] !== undefined && d[k] !== "") return d[k];
@@ -102,15 +95,12 @@
     if (!raw) return null;
     const s = String(raw).trim();
 
-    // YYYY-MM-DD hoặc YYYY/MM/DD
     let m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
     if (m) return { d: parseInt(m[3], 10), m: parseInt(m[2], 10), y: parseInt(m[1], 10) };
 
-    // DD/MM/YYYY hoặc DD-MM-YYYY
     m = s.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
     if (m) return { d: parseInt(m[1], 10), m: parseInt(m[2], 10), y: parseInt(m[3], 10) };
 
-    // DD/MM hoặc DD-MM (không năm)
     m = s.match(/^(\d{1,2})[-\/](\d{1,2})$/);
     if (m) return { d: parseInt(m[1], 10), m: parseInt(m[2], 10), y: null };
 
@@ -163,6 +153,5 @@
   window.isBirthdayToday = isBirthdayToday;
   window.getDaysUntilBirthday = getDaysUntilBirthday;
 
-  // Ghi log để bạn biết file đã load thành công
   console.log("[config.js] ✅ Đã nạp cấu hình và tiện ích");
 })();
