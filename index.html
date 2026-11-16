@@ -26,10 +26,12 @@
           keyframes: {
             fadeIn: { "0%": { opacity: 0 }, "100%": { opacity: 1 } },
             slideUp: { "0%": { opacity: 0, transform: "translateY(12px)" }, "100%": { opacity: 1, transform: "translateY(0)" } },
+            bounceIn: { "0%": { transform: "scale(.9)", opacity: 0 }, "60%": { transform: "scale(1.03)" }, "100%": { transform: "scale(1)", opacity: 1 } },
           },
           animation: {
             fadeIn: "fadeIn .15s ease-out",
             slideUp: "slideUp .2s ease-out",
+            bounceIn: "bounceIn .35s ease-out",
           },
         },
       },
@@ -119,6 +121,35 @@
       if (cv.includes("chuyên viên")) return 5;
       if (cv.includes("kiểm tra viên")) return 6;
       return 99; // các chức vụ khác xếp cuối
+    };
+
+    // ====== XỬ LÝ NGÀY SINH ======
+    // Chuẩn hóa ngày sinh về {d, m} để so sánh theo ngày/tháng (bỏ qua năm)
+    const parseBirthday = (raw) => {
+      if (!raw) return null;
+      const s = String(raw).trim();
+      // Dạng ISO: 1990-05-20
+      let m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
+      if (m) return { d: parseInt(m[3], 10), m: parseInt(m[2], 10), y: parseInt(m[1], 10) };
+      // Dạng VN: 20/05/1990 hoặc 20-05-1990
+      m = s.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+      if (m) return { d: parseInt(m[1], 10), m: parseInt(m[2], 10), y: parseInt(m[3], 10) };
+      // Dạng 20/05 hoặc 20-05 (không năm)
+      m = s.match(/^(\d{1,2})[-\/](\d{1,2})$/);
+      if (m) return { d: parseInt(m[1], 10), m: parseInt(m[2], 10), y: null };
+      return null;
+    };
+
+    const getTodayParts = () => {
+      const t = new Date();
+      return { d: t.getDate(), m: t.getMonth() + 1, y: t.getFullYear() };
+    };
+
+    const isBirthdayToday = (raw) => {
+      const b = parseBirthday(raw);
+      if (!b) return false;
+      const t = getTodayParts();
+      return b.d === t.d && b.m === t.m;
     };
 
     // ====== HOOK ======
@@ -233,6 +264,66 @@
       );
     }
 
+    // ====== BANNER SINH NHẬT ======
+    function BirthdayBanner({ nhanSu }) {
+      const [dismissed, setDismissed] = useState(false);
+
+      const todayList = useMemo(
+        () => nhanSu.filter((n) => isBirthdayToday(n.ngaySinh)),
+        [nhanSu]
+      );
+
+      // Reset dismissed nếu danh sách thay đổi (ví dụ sang ngày mới khi reload)
+      useEffect(() => { setDismissed(false); }, [todayList.length]);
+
+      if (todayList.length === 0 || dismissed) return null;
+
+      const today = getTodayParts();
+
+      return h("div", {
+        className: "relative overflow-hidden rounded-2xl mb-6 p-5 bg-gradient-to-r from-pink-500 via-rose-500 to-amber-400 text-white shadow-pop animate-bounceIn",
+      },
+        // Trang trí nền
+        h("div", { className: "absolute -right-6 -top-6 text-[120px] opacity-20 select-none pointer-events-none" }, "🎂"),
+        h("div", { className: "absolute -left-4 -bottom-8 text-[100px] opacity-10 select-none pointer-events-none" }, "🎉"),
+
+        h("div", { className: "relative flex items-start gap-4" },
+          h("div", { className: "w-12 h-12 rounded-full bg-white/20 backdrop-blur flex items-center justify-center text-2xl shrink-0" }, "🎂"),
+          h("div", { className: "flex-1 min-w-0" },
+            h("div", { className: "flex items-center gap-2 flex-wrap" },
+              h("h2", { className: "text-lg font-bold" }, "Chúc mừng sinh nhật!"),
+              h("span", { className: "text-xs bg-white/20 px-2 py-0.5 rounded-full" }, `Hôm nay ${today.d}/${today.m}`)
+            ),
+            h("p", { className: "text-sm text-white/80 mt-0.5" },
+              todayList.length === 1
+                ? "Hôm nay có 1 đồng nghiệp kỷ niệm ngày sinh:"
+                : `Hôm nay có ${todayList.length} đồng nghiệp kỷ niệm ngày sinh:`
+            ),
+            h("div", { className: "mt-3 flex flex-wrap gap-2" },
+              todayList.map((n, i) =>
+                h("div", {
+                  key: i,
+                  className: "flex items-center gap-2 bg-white/15 hover:bg-white/25 transition rounded-full pl-1 pr-3 py-1",
+                },
+                  h(Avatar, { src: n.avatar, name: n.hoTen, size: 28 }),
+                  h("div", { className: "leading-tight" },
+                    h("p", { className: "text-sm font-semibold" }, n.hoTen || "—"),
+                    h("p", { className: "text-[11px] text-white/75" }, n.chucVu || n.donVi || "")
+                  )
+                )
+              )
+            )
+          ),
+          h("button", {
+            onClick: () => setDismissed(true),
+            className: "w-8 h-8 rounded-full hover:bg-white/20 text-white/90 hover:text-white flex items-center justify-center text-lg leading-none shrink-0",
+            "aria-label": "Đóng thông báo",
+            title: "Đóng",
+          }, "×")
+        )
+      );
+    }
+
     // ====== MODAL CÁN BỘ ======
     function CanBoDetail({ tenCanBo, data, onClose }) {
       const dsQuanLy = useMemo(
@@ -303,11 +394,22 @@
       const chucVuColor =
         /trưởng|phó|giám đốc/i.test(n.chucVu || "") ? "blue" :
         /chuyên viên|kiểm tra/i.test(n.chucVu || "") ? "green" : "slate";
+      const isBday = isBirthdayToday(n.ngaySinh);
       return h("div", {
         onClick,
-        className: "group bg-white rounded-xl shadow-card hover:shadow-pop ring-1 ring-slate-100 hover:ring-brand-200 transition p-4 flex gap-4 cursor-pointer",
+        className: `group bg-white rounded-xl shadow-card hover:shadow-pop ring-1 transition p-4 flex gap-4 cursor-pointer ${
+          isBday ? "ring-pink-300 bg-pink-50/40" : "ring-slate-100 hover:ring-brand-200"
+        }`,
       },
-        h(Avatar, { src: n.avatar, name: n.hoTen, size: 64 }),
+        h("div", { className: "relative shrink-0" },
+          h(Avatar, { src: n.avatar, name: n.hoTen, size: 64 }),
+          isBday
+            ? h("span", {
+                className: "absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-pink-500 text-white text-xs flex items-center justify-center shadow-card ring-2 ring-white",
+                title: "Hôm nay là sinh nhật",
+              }, "🎂")
+            : null
+        ),
         h("div", { className: "flex-1 min-w-0" },
           h("div", { className: "flex items-start justify-between gap-2" },
             h("h3", { className: "font-semibold text-slate-800 truncate group-hover:text-brand-700" }, n.hoTen || "—"),
@@ -317,7 +419,11 @@
           h("div", { className: "mt-3 grid grid-cols-1 gap-1 text-xs text-slate-600" },
             h("div", { className: "flex items-center gap-2" }, h("span", { className: "text-slate-400" }, "📞"), n.soDienThoai || "—"),
             h("div", { className: "flex items-center gap-2" }, h("span", { className: "text-slate-400" }, "☎️"), n.phone_cq || "—"),
-            h("div", { className: "flex items-center gap-2" }, h("span", { className: "text-slate-400" }, "🎂"), formatDate(n.ngaySinh))
+            h("div", { className: `flex items-center gap-2 ${isBday ? "text-pink-600 font-medium" : ""}` },
+              h("span", { className: isBday ? "" : "text-slate-400" }, isBday ? "🎂" : "🎂"),
+              formatDate(n.ngaySinh),
+              isBday ? h("span", { className: "ml-1 text-[10px] bg-pink-100 text-pink-700 px-1.5 py-0.5 rounded-full" }, "Hôm nay!") : null
+            )
           )
         )
       );
@@ -334,8 +440,12 @@
               )
             ),
             h("tbody", { className: "divide-y divide-slate-100" },
-              data.map((n) =>
-                h("tr", { key: n.id || n.hoTen, className: "hover:bg-slate-50/70" },
+              data.map((n) => {
+                const isBday = isBirthdayToday(n.ngaySinh);
+                return h("tr", {
+                  key: n.id || n.hoTen,
+                  className: `hover:bg-slate-50/70 ${isBday ? "bg-pink-50/50" : ""}`,
+                },
                   h("td", { className: "px-4 py-3" },
                     h("div", { className: "flex items-center gap-3" },
                       h(Avatar, { src: n.avatar, name: n.hoTen, size: 36 }),
@@ -345,7 +455,8 @@
                             className: "font-medium text-brand-700 hover:underline whitespace-nowrap",
                             title: "Xem doanh nghiệp được quản lý",
                           }, n.hoTen || "—")
-                        : h("span", { className: "font-medium text-slate-800 whitespace-nowrap" }, n.hoTen || "—")
+                        : h("span", { className: "font-medium text-slate-800 whitespace-nowrap" }, n.hoTen || "—"),
+                      isBday ? h("span", { title: "Sinh nhật hôm nay" }, "🎂") : null
                     )
                   ),
                   h("td", { className: "px-4 py-3 text-slate-700" }, n.chucVu || "—"),
@@ -353,9 +464,11 @@
                   h("td", { className: "px-4 py-3 text-slate-700" }, n.toNghiepVu || "—"),
                   h("td", { className: "px-4 py-3 text-slate-700 whitespace-nowrap" }, n.soDienThoai || "—"),
                   h("td", { className: "px-4 py-3 text-slate-700 whitespace-nowrap" }, n.phone_cq || "—"),
-                  h("td", { className: "px-4 py-3 text-slate-700 whitespace-nowrap" }, formatDate(n.ngaySinh))
-                )
-              )
+                  h("td", { className: `px-4 py-3 whitespace-nowrap ${isBday ? "text-pink-600 font-semibold" : "text-slate-700"}` },
+                    formatDate(n.ngaySinh)
+                  )
+                );
+              })
             )
           )
         )
@@ -374,9 +487,12 @@
         [data]
       );
 
-      // Sắp xếp theo chức vụ trước, rồi mới lọc
+      // Sắp xếp: sinh nhật hôm nay lên đầu, sau đó theo chức vụ, rồi tên
       const sorted = useMemo(() => {
         return [...data].sort((a, b) => {
+          const ba = isBirthdayToday(a.ngaySinh) ? 0 : 1;
+          const bb = isBirthdayToday(b.ngaySinh) ? 0 : 1;
+          if (ba !== bb) return ba - bb;
           const ra = getChucVuRank(a.chucVu);
           const rb = getChucVuRank(b.chucVu);
           if (ra !== rb) return ra - rb;
@@ -399,6 +515,9 @@
       if (error) return h(ErrorBox, { error });
 
       return h("div", null,
+        // ⬇️ BANNER SINH NHẬT
+        h(BirthdayBanner, { nhanSu: data }),
+
         h("div", { className: "mb-4" },
           h("h1", { className: "text-xl font-semibold text-slate-800" }, "Danh sách nhân sự"),
           h("p", { className: "text-sm text-slate-500" }, `Hiển thị ${filtered.length} / ${data.length} nhân sự`)
