@@ -45,7 +45,7 @@
       animation: shimmer 1.2s infinite;
     }
     @keyframes shimmer { 100% { transform: translateX(100%); } }
-    ::-webkit-scrollbar { height: 8px; width: 8px; }
+    ::-webkit-scrollbar { height: 6px; width: 6px; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
   </style>
@@ -111,7 +111,6 @@
       return key ? d[key] : "";
     };
 
-    // Xếp hạng chức vụ để sắp xếp nhân sự
     const getChucVuRank = (chucVu) => {
       const cv = (chucVu || "").toLowerCase().trim();
       if (cv.includes("trưởng phòng")) return 1;
@@ -120,21 +119,17 @@
       if (cv.includes("kiểm tra viên chính")) return 4;
       if (cv.includes("chuyên viên")) return 5;
       if (cv.includes("kiểm tra viên")) return 6;
-      return 99; // các chức vụ khác xếp cuối
+      return 99;
     };
 
     // ====== XỬ LÝ NGÀY SINH ======
-    // Chuẩn hóa ngày sinh về {d, m} để so sánh theo ngày/tháng (bỏ qua năm)
     const parseBirthday = (raw) => {
       if (!raw) return null;
       const s = String(raw).trim();
-      // Dạng ISO: 1990-05-20
       let m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
       if (m) return { d: parseInt(m[3], 10), m: parseInt(m[2], 10), y: parseInt(m[1], 10) };
-      // Dạng VN: 20/05/1990 hoặc 20-05-1990
       m = s.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
       if (m) return { d: parseInt(m[1], 10), m: parseInt(m[2], 10), y: parseInt(m[3], 10) };
-      // Dạng 20/05 hoặc 20-05 (không năm)
       m = s.match(/^(\d{1,2})[-\/](\d{1,2})$/);
       if (m) return { d: parseInt(m[1], 10), m: parseInt(m[2], 10), y: null };
       return null;
@@ -152,6 +147,20 @@
       return b.d === t.d && b.m === t.m;
     };
 
+    // Tính ngày sinh nhật sắp tới gần nhất (trong vòng 365 ngày)
+    const getDaysUntilBirthday = (raw) => {
+      const b = parseBirthday(raw);
+      if (!b) return null;
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      let nextBday = new Date(today.getFullYear(), b.m - 1, b.d);
+      if (nextBday < today) {
+        nextBday.setFullYear(today.getFullYear() + 1);
+      }
+      const diffTime = Math.abs(nextBday - today);
+      return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    };
+
     // ====== HOOK ======
     function useSheetData(gid, { filterEmpty }) {
       const [data, setData] = useState([]);
@@ -162,27 +171,21 @@
         let cancelled = false;
         fetch(csvUrl(gid))
           .then((res) => {
-            if (!res.ok) throw new Error(`HTTP ${res.status} – không tải được sheet (gid=${gid})`);
+            if (!res.ok) throw new Error(`HTTP ${res.status} – không tải được sheet`);
             return res.text();
           })
           .then((csv) => {
             if (cancelled) return;
-            if (csv.trim().startsWith("<")) {
-              throw new Error("Sheet chưa public. Share → Anyone with the link → Viewer.");
-            }
+            if (csv.trim().startsWith("<")) throw new Error("Sheet chưa public.");
             const { data: rows } = Papa.parse(csv, { header: true, skipEmptyLines: true });
             const cleaned = rows
               .map((r) => {
                 const o = {};
-                Object.keys(r).forEach((k) => {
-                  o[k.trim()] = (r[k] ?? "").toString().trim();
-                });
+                Object.keys(r).forEach((k) => { o[k.trim()] = (r[k] ?? "").toString().trim(); });
                 return o;
               })
               .filter(filterEmpty);
-            if (cleaned.length === 0) {
-              throw new Error("Không có dòng dữ liệu. Kiểm tra tên cột hoặc gid.");
-            }
+            if (cleaned.length === 0) throw new Error("Không có dữ liệu.");
             setData(cleaned);
           })
           .catch((e) => !cancelled && setError(e))
@@ -193,13 +196,8 @@
       return { data, loading, error };
     }
 
-    const useNhanSuData = () =>
-      useSheetData(GID_NHANSU, { filterEmpty: (r) => r.id || r.hoTen });
-
-    const useDoanhNghiepData = () =>
-      useSheetData(GID_DOANHNGHIEP, {
-        filterEmpty: (r) => r["Tên NNT"] || getMST(r) || r["Mã cán bộ"],
-      });
+    const useNhanSuData = () => useSheetData(GID_NHANSU, { filterEmpty: (r) => r.id || r.hoTen });
+    const useDoanhNghiepData = () => useSheetData(GID_DOANHNGHIEP, { filterEmpty: (r) => r["Tên NNT"] || getMST(r) || r["Mã cán bộ"] });
 
     // ====== UI PRIMITIVES ======
     const Badge = ({ children, color = "slate" }) => {
@@ -211,7 +209,7 @@
         rose: "bg-rose-50 text-rose-700 ring-rose-200",
       };
       return h("span", {
-        className: `inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset ${map[color] || map.slate}`,
+        className: `inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-medium ring-1 ring-inset whitespace-nowrap ${map[color] || map.slate}`,
       }, children);
     };
 
@@ -234,16 +232,14 @@
 
     const Skeleton = ({ className = "" }) => h("div", { className: `skeleton rounded ${className}` });
 
-    // ====== LOADING / ERROR ======
     function TableSkeleton() {
-      return h("div", { className: "bg-white rounded-xl shadow-card p-5" },
+      return h("div", { className: "bg-white rounded-xl shadow-card p-4 sm:p-5" },
         h("div", { className: "space-y-3" },
-          Array.from({ length: 8 }).map((_, i) =>
-            h("div", { key: i, className: "flex items-center gap-4" },
+          Array.from({ length: 6 }).map((_, i) =>
+            h("div", { key: i, className: "flex items-center gap-3 sm:gap-4" },
               h(Skeleton, { className: "h-10 w-10 rounded-full" }),
               h(Skeleton, { className: "h-3 flex-1" }),
-              h(Skeleton, { className: "h-3 w-40" }),
-              h(Skeleton, { className: "h-3 w-24" })
+              h(Skeleton, { className: "h-3 w-20 sm:w-40" })
             )
           )
         )
@@ -251,10 +247,10 @@
     }
 
     function ErrorBox({ error }) {
-      return h("div", { className: "max-w-lg mx-auto mt-20" },
-        h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-rose-100 p-6" },
+      return h("div", { className: "max-w-lg mx-auto mt-10 sm:mt-20 px-4" },
+        h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-rose-100 p-5 sm:p-6" },
           h("div", { className: "flex items-start gap-3" },
-            h("div", { className: "w-10 h-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center shrink-0" }, "!"),
+            h("div", { className: "w-10 h-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 font-bold" }, "!"),
             h("div", null,
               h("h3", { className: "font-semibold text-slate-800" }, "Không tải được dữ liệu"),
               h("p", { className: "text-sm text-slate-600 mt-1" }, error.message)
@@ -268,60 +264,75 @@
     function BirthdayBanner({ nhanSu }) {
       const [dismissed, setDismissed] = useState(false);
 
-      const todayList = useMemo(
-        () => nhanSu.filter((n) => isBirthdayToday(n.ngaySinh)),
-        [nhanSu]
-      );
+      const todayList = useMemo(() => nhanSu.filter((n) => isBirthdayToday(n.ngaySinh)), [nhanSu]);
+      
+      const upcomingList = useMemo(() => {
+        return nhanSu
+          .map(n => ({ ...n, daysLeft: getDaysUntilBirthday(n.ngaySinh) }))
+          .filter(n => n.daysLeft !== null && n.daysLeft > 0 && n.daysLeft <= 7) // Lấy người có SN trong 7 ngày tới
+          .sort((a, b) => a.daysLeft - b.daysLeft);
+      }, [nhanSu]);
 
-      // Reset dismissed nếu danh sách thay đổi (ví dụ sang ngày mới khi reload)
       useEffect(() => { setDismissed(false); }, [todayList.length]);
 
-      if (todayList.length === 0 || dismissed) return null;
+      if (todayList.length === 0 && upcomingList.length === 0) return null;
 
       const today = getTodayParts();
 
-      return h("div", {
-        className: "relative overflow-hidden rounded-2xl mb-6 p-5 bg-gradient-to-r from-pink-500 via-rose-500 to-amber-400 text-white shadow-pop animate-bounceIn",
-      },
-        // Trang trí nền
-        h("div", { className: "absolute -right-6 -top-6 text-[120px] opacity-20 select-none pointer-events-none" }, "🎂"),
-        h("div", { className: "absolute -left-4 -bottom-8 text-[100px] opacity-10 select-none pointer-events-none" }, "🎉"),
-
-        h("div", { className: "relative flex items-start gap-4" },
-          h("div", { className: "w-12 h-12 rounded-full bg-white/20 backdrop-blur flex items-center justify-center text-2xl shrink-0" }, "🎂"),
-          h("div", { className: "flex-1 min-w-0" },
-            h("div", { className: "flex items-center gap-2 flex-wrap" },
-              h("h2", { className: "text-lg font-bold" }, "Chúc mừng sinh nhật!"),
-              h("span", { className: "text-xs bg-white/20 px-2 py-0.5 rounded-full" }, `Hôm nay ${today.d}/${today.m}`)
-            ),
-            h("p", { className: "text-sm text-white/80 mt-0.5" },
-              todayList.length === 1
-                ? "Hôm nay có 1 đồng nghiệp kỷ niệm ngày sinh:"
-                : `Hôm nay có ${todayList.length} đồng nghiệp kỷ niệm ngày sinh:`
-            ),
-            h("div", { className: "mt-3 flex flex-wrap gap-2" },
-              todayList.map((n, i) =>
-                h("div", {
-                  key: i,
-                  className: "flex items-center gap-2 bg-white/15 hover:bg-white/25 transition rounded-full pl-1 pr-3 py-1",
-                },
-                  h(Avatar, { src: n.avatar, name: n.hoTen, size: 28 }),
-                  h("div", { className: "leading-tight" },
-                    h("p", { className: "text-sm font-semibold" }, n.hoTen || "—"),
-                    h("p", { className: "text-[11px] text-white/75" }, n.chucVu || n.donVi || "")
+      // Nếu có sinh nhật HÔM NAY -> Hiện banner lớn
+      if (todayList.length > 0 && !dismissed) {
+        return h("div", {
+          className: "relative overflow-hidden rounded-2xl mb-5 p-4 sm:p-5 bg-gradient-to-r from-pink-500 via-rose-500 to-amber-400 text-white shadow-pop animate-bounceIn",
+        },
+          h("div", { className: "absolute -right-6 -top-6 text-[100px] sm:text-[120px] opacity-20 select-none pointer-events-none" }, "🎂"),
+          h("div", { className: "relative flex items-start gap-3 sm:gap-4" },
+            h("div", { className: "w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/20 backdrop-blur flex items-center justify-center text-xl sm:text-2xl shrink-0" }, "🎂"),
+            h("div", { className: "flex-1 min-w-0" },
+              h("div", { className: "flex items-center gap-2 flex-wrap" },
+                h("h2", { className: "text-base sm:text-lg font-bold" }, "Chúc mừng sinh nhật!"),
+                h("span", { className: "text-[10px] sm:text-xs bg-white/20 px-2 py-0.5 rounded-full" }, `Hôm nay ${today.d}/${today.m}`)
+              ),
+              h("p", { className: "text-xs sm:text-sm text-white/90 mt-0.5" },
+                todayList.length === 1 ? "Hôm nay có 1 đồng nghiệp kỷ niệm ngày sinh:" : `Hôm nay có ${todayList.length} đồng nghiệp kỷ niệm ngày sinh:`
+              ),
+              h("div", { className: "mt-3 flex flex-wrap gap-2" },
+                todayList.map((n, i) =>
+                  h("div", { key: i, className: "flex items-center gap-2 bg-white/15 rounded-full pl-1 pr-3 py-1" },
+                    h(Avatar, { src: n.avatar, name: n.hoTen, size: 24 }),
+                    h("div", { className: "leading-tight" },
+                      h("p", { className: "text-xs sm:text-sm font-semibold" }, n.hoTen || "—"),
+                      h("p", { className: "text-[10px] sm:text-[11px] text-white/80 hidden sm:block" }, n.chucVu || n.donVi || "")
+                    )
                   )
                 )
               )
+            ),
+            h("button", {
+              onClick: () => setDismissed(true),
+              className: "w-8 h-8 rounded-full hover:bg-white/20 text-white/90 flex items-center justify-center text-xl shrink-0 -mt-1 -mr-1",
+            }, "×")
+          )
+        );
+      }
+
+      // Nếu KHÔNG có hôm nay, nhưng có sắp tới -> Hiện thanh thông báo nhỏ
+      if (upcomingList.length > 0) {
+        return h("div", { className: "bg-blue-50 border border-blue-100 rounded-xl p-3 mb-4 flex items-center gap-3 text-sm text-blue-800 shadow-sm" },
+          h("span", { className: "text-lg" }, "🗓️"),
+          h("div", { className: "flex-1" },
+            h("span", { className: "font-semibold" }, "Sinh nhật sắp tới: "),
+            upcomingList.map((n, i) => 
+              h("span", { key: i, className: "inline-block mr-1" }, 
+                n.hoTen, 
+                h("span", { className: "text-blue-600 font-medium ml-1" }, `(${n.daysLeft === 1 ? "Mai" : n.daysLeft + " ngày nữa"})`),
+                i < upcomingList.length - 1 ? ", " : ""
+              )
             )
-          ),
-          h("button", {
-            onClick: () => setDismissed(true),
-            className: "w-8 h-8 rounded-full hover:bg-white/20 text-white/90 hover:text-white flex items-center justify-center text-lg leading-none shrink-0",
-            "aria-label": "Đóng thông báo",
-            title: "Đóng",
-          }, "×")
-        )
-      );
+          )
+        );
+      }
+
+      return null;
     }
 
     // ====== MODAL CÁN BỘ ======
@@ -337,49 +348,47 @@
       }, [onClose]);
 
       return h("div", {
-        className: "fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn",
+        className: "fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn",
         onClick: onClose,
       },
         h("div", {
-          className: "bg-white w-full max-w-4xl max-h-[85vh] rounded-2xl shadow-pop overflow-hidden flex flex-col animate-slideUp",
+          className: "bg-white w-full sm:max-w-4xl max-h-[90vh] sm:max-h-[85vh] rounded-t-2xl sm:rounded-2xl shadow-pop overflow-hidden flex flex-col animate-slideUp",
           onClick: (e) => e.stopPropagation(),
         },
-          h("div", { className: "px-6 py-4 border-b border-slate-100 flex items-start justify-between gap-4" },
+          h("div", { className: "px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3" },
             h("div", { className: "flex items-center gap-3" },
               h(Avatar, { name: tenCanBo, size: 44 }),
               h("div", null,
-                h("h2", { className: "text-lg font-semibold text-slate-800" }, tenCanBo || "—"),
-                h("p", { className: "text-sm text-slate-500" },
-                  "Đang quản lý ", h("span", { className: "font-semibold text-brand-700" }, dsQuanLy.length), " doanh nghiệp"
+                h("h2", { className: "text-base sm:text-lg font-semibold text-slate-800" }, tenCanBo || "—"),
+                h("p", { className: "text-xs sm:text-sm text-slate-500" },
+                  "Đang quản lý ", h("span", { className: "font-semibold text-brand-700" }, dsQuanLy.length), " DN"
                 )
               )
             ),
             h("button", {
               onClick: onClose,
-              className: "w-9 h-9 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 text-xl leading-none flex items-center justify-center",
-              "aria-label": "Đóng",
+              className: "w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center text-lg shrink-0",
             }, "×")
           ),
-          h("div", { className: "overflow-auto" },
+          h("div", { className: "overflow-auto p-1" },
             dsQuanLy.length === 0
-              ? h("div", { className: "text-center py-16" },
-                  h("div", { className: "text-4xl mb-3" }, "📭"),
-                  h("p", { className: "text-slate-500" }, "Cán bộ này chưa được phân công quản lý doanh nghiệp nào.")
+              ? h("div", { className: "text-center py-12" },
+                  h("div", { className: "text-3xl mb-2" }, "📭"),
+                  h("p", { className: "text-sm text-slate-500" }, "Chưa phân công doanh nghiệp nào.")
                 )
               : h("table", { className: "w-full text-sm" },
-                  h("thead", { className: "bg-slate-50 text-slate-500 text-xs uppercase tracking-wide sticky top-0" },
+                  h("thead", { className: "bg-slate-50 text-slate-500 text-[11px] sm:text-xs uppercase tracking-wide sticky top-0" },
                     h("tr", null,
-                      ["Mã số thuế", "Tên NNT", "Phòng", "CQT quản lý"].map((x) =>
-                        h("th", { key: x, className: "px-4 py-3 text-left font-medium whitespace-nowrap" }, x))
+                      ["Mã số thuế", "Tên NNT", "Phòng"].map((x) =>
+                        h("th", { key: x, className: "px-3 sm:px-4 py-3 text-left font-medium whitespace-nowrap" }, x))
                     )
                   ),
                   h("tbody", { className: "divide-y divide-slate-100" },
                     dsQuanLy.map((d, i) =>
                       h("tr", { key: i, className: "hover:bg-slate-50/70" },
-                        h("td", { className: "px-4 py-3 font-mono text-xs text-slate-700 whitespace-nowrap" }, getMST(d) || "—"),
-                        h("td", { className: "px-4 py-3 text-slate-800 font-medium" }, d["Tên NNT"] || "—"),
-                        h("td", { className: "px-4 py-3 text-slate-600" }, d["Tên phòng"] || "—"),
-                        h("td", { className: "px-4 py-3 text-slate-600 whitespace-nowrap" }, d["CQT quản lý"] || "—")
+                        h("td", { className: "px-3 sm:px-4 py-3 font-mono text-[11px] sm:text-xs text-slate-700 whitespace-nowrap" }, getMST(d) || "—"),
+                        h("td", { className: "px-3 sm:px-4 py-3 text-slate-800 font-medium" }, d["Tên NNT"] || "—"),
+                        h("td", { className: "px-3 sm:px-4 py-3 text-slate-600 whitespace-nowrap" }, d["Tên phòng"] || "—")
                       )
                     )
                   )
@@ -389,92 +398,39 @@
       );
     }
 
-    // ====== NHÂN SỰ ======
+    // ====== NHÂN SỰ CARD ======
     function NhanSuCard({ n, onClick }) {
-      const chucVuColor =
-        /trưởng|phó|giám đốc/i.test(n.chucVu || "") ? "blue" :
-        /chuyên viên|kiểm tra/i.test(n.chucVu || "") ? "green" : "slate";
+      const chucVuColor = /trưởng|phó|giám đốc/i.test(n.chucVu || "") ? "blue" : /chuyên viên|kiểm tra/i.test(n.chucVu || "") ? "green" : "slate";
       const isBday = isBirthdayToday(n.ngaySinh);
+      
       return h("div", {
         onClick,
-        className: `group bg-white rounded-xl shadow-card hover:shadow-pop ring-1 transition p-4 flex gap-4 cursor-pointer ${
-          isBday ? "ring-pink-300 bg-pink-50/40" : "ring-slate-100 hover:ring-brand-200"
+        className: `group bg-white rounded-xl shadow-card hover:shadow-pop ring-1 transition p-3 sm:p-4 flex gap-3 sm:gap-4 cursor-pointer relative ${
+          isBday ? "ring-pink-300 bg-pink-50/30" : "ring-slate-100 hover:ring-brand-200"
         }`,
       },
-        h("div", { className: "relative shrink-0" },
-          h(Avatar, { src: n.avatar, name: n.hoTen, size: 64 }),
-          isBday
-            ? h("span", {
-                className: "absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-pink-500 text-white text-xs flex items-center justify-center shadow-card ring-2 ring-white",
-                title: "Hôm nay là sinh nhật",
-              }, "🎂")
-            : null
+        h("div", { className: "relative shrink-0 mt-1" },
+          h(Avatar, { src: n.avatar, name: n.hoTen, size: 52 }), // Nhỏ lại 1 chút cho mobile
+          isBday ? h("span", { className: "absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-pink-500 text-white text-[10px] flex items-center justify-center shadow-card ring-2 ring-white" }, "🎂") : null
         ),
         h("div", { className: "flex-1 min-w-0" },
-          h("div", { className: "flex items-start justify-between gap-2" },
-            h("h3", { className: "font-semibold text-slate-800 truncate group-hover:text-brand-700" }, n.hoTen || "—"),
-            h(Badge, { color: chucVuColor }, n.chucVu || "—")
+          h("div", { className: "flex flex-col sm:flex-row sm:items-start justify-between gap-1 sm:gap-2" },
+            h("h3", { className: "font-semibold text-slate-800 text-[15px] sm:text-base truncate group-hover:text-brand-700 pr-2" }, n.hoTen || "—"),
+            h("div", { className: "shrink-0" }, h(Badge, { color: chucVuColor }, n.chucVu || "—"))
           ),
-          h("p", { className: "text-xs text-slate-500 mt-1 truncate" }, `${n.donVi || "—"}${n.toNghiepVu ? " • " + n.toNghiepVu : ""}`),
-          h("div", { className: "mt-3 grid grid-cols-1 gap-1 text-xs text-slate-600" },
+          h("p", { className: "text-[11px] sm:text-xs text-slate-500 mt-0.5 truncate" }, `${n.donVi || "—"}`),
+          h("div", { className: "mt-2 sm:mt-3 grid grid-cols-1 gap-1 text-[11px] sm:text-xs text-slate-600" },
             h("div", { className: "flex items-center gap-2" }, h("span", { className: "text-slate-400" }, "📞"), n.soDienThoai || "—"),
             h("div", { className: "flex items-center gap-2" }, h("span", { className: "text-slate-400" }, "☎️"), n.phone_cq || "—"),
-            h("div", { className: `flex items-center gap-2 ${isBday ? "text-pink-600 font-medium" : ""}` },
-              h("span", { className: isBday ? "" : "text-slate-400" }, isBday ? "🎂" : "🎂"),
-              formatDate(n.ngaySinh),
-              isBday ? h("span", { className: "ml-1 text-[10px] bg-pink-100 text-pink-700 px-1.5 py-0.5 rounded-full" }, "Hôm nay!") : null
+            h("div", { className: `flex items-center gap-2 ${isBday ? "text-pink-600 font-bold" : ""}` },
+              h("span", { className: isBday ? "" : "text-slate-400" }, "🎂"), formatDate(n.ngaySinh)
             )
           )
-        )
+        }
       );
     }
 
-    function NhanSuTable({ data, onCanBoClick }) {
-      return h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 overflow-hidden" },
-        h("div", { className: "overflow-x-auto" },
-          h("table", { className: "w-full text-sm" },
-            h("thead", { className: "bg-slate-50 text-slate-500 text-xs uppercase tracking-wide sticky top-0" },
-              h("tr", null,
-                ["Nhân sự", "Chức vụ", "Đơn vị", "SĐT", "SĐT CQ", "Ngày sinh"].map((x) =>
-                  h("th", { key: x, className: "px-4 py-3 text-left font-medium whitespace-nowrap" }, x))
-              )
-            ),
-            h("tbody", { className: "divide-y divide-slate-100" },
-              data.map((n) => {
-                const isBday = isBirthdayToday(n.ngaySinh);
-                return h("tr", {
-                  key: n.id || n.hoTen,
-                  className: `hover:bg-slate-50/70 ${isBday ? "bg-pink-50/50" : ""}`,
-                },
-                  h("td", { className: "px-4 py-3" },
-                    h("div", { className: "flex items-center gap-3" },
-                      h(Avatar, { src: n.avatar, name: n.hoTen, size: 36 }),
-                      onCanBoClick
-                        ? h("button", {
-                            onClick: () => onCanBoClick(n.hoTen),
-                            className: "font-medium text-brand-700 hover:underline whitespace-nowrap",
-                            title: "Xem doanh nghiệp được quản lý",
-                          }, n.hoTen || "—")
-                        : h("span", { className: "font-medium text-slate-800 whitespace-nowrap" }, n.hoTen || "—"),
-                      isBday ? h("span", { title: "Sinh nhật hôm nay" }, "🎂") : null
-                    )
-                  ),
-                  h("td", { className: "px-4 py-3 text-slate-700" }, n.chucVu || "—"),
-                  h("td", { className: "px-4 py-3 text-slate-700" }, n.donVi || "—"),
-                  h("td", { className: "px-4 py-3 text-slate-700" }, n.toNghiepVu || "—"),
-                  h("td", { className: "px-4 py-3 text-slate-700 whitespace-nowrap" }, n.soDienThoai || "—"),
-                  h("td", { className: "px-4 py-3 text-slate-700 whitespace-nowrap" }, n.phone_cq || "—"),
-                  h("td", { className: `px-4 py-3 whitespace-nowrap ${isBday ? "text-pink-600 font-semibold" : "text-slate-700"}` },
-                    formatDate(n.ngaySinh)
-                  )
-                );
-              })
-            )
-          )
-        )
-      );
-    }
-
+    // ====== NHÂN SỰ VIEW ======
     function NhanSuView({ dnData }) {
       const { data, loading, error } = useNhanSuData();
       const [keyword, setKeyword] = useState("");
@@ -482,12 +438,8 @@
       const [viewMode, setViewMode] = useState("card");
       const [selectedCanBo, setSelectedCanBo] = useState(null);
 
-      const danhSachDonVi = useMemo(
-        () => [...new Set(data.map((n) => n.donVi).filter(Boolean))],
-        [data]
-      );
+      const danhSachDonVi = useMemo(() => [...new Set(data.map((n) => n.donVi).filter(Boolean))], [data]);
 
-      // Sắp xếp: sinh nhật hôm nay lên đầu, sau đó theo chức vụ, rồi tên
       const sorted = useMemo(() => {
         return [...data].sort((a, b) => {
           const ba = isBirthdayToday(a.ngaySinh) ? 0 : 1;
@@ -503,10 +455,7 @@
       const filtered = useMemo(() => {
         const kw = keyword.toLowerCase();
         return sorted.filter((n) => {
-          const okKw =
-            (n.hoTen || "").toLowerCase().includes(kw) ||
-            (n.chucVu || "").toLowerCase().includes(kw) ||
-            (n.soDienThoai || "").includes(keyword);
+          const okKw = (n.hoTen || "").toLowerCase().includes(kw) || (n.chucVu || "").toLowerCase().includes(kw) || (n.soDienThoai || "").includes(keyword);
           return okKw && (donViFilter ? n.donVi === donViFilter : true);
         });
       }, [sorted, keyword, donViFilter]);
@@ -515,67 +464,85 @@
       if (error) return h(ErrorBox, { error });
 
       return h("div", null,
-        // ⬇️ BANNER SINH NHẬT
-        h(BirthdayBanner, { nhanSu: data }),
+        h(BirthdayBanner, { nhanSu: data }), // Tích hợp banner thông minh
 
-        h("div", { className: "mb-4" },
-          h("h1", { className: "text-xl font-semibold text-slate-800" }, "Danh sách nhân sự"),
-          h("p", { className: "text-sm text-slate-500" }, `Hiển thị ${filtered.length} / ${data.length} nhân sự`)
+        h("div", { className: "mb-3 flex items-end justify-between" },
+          h("div", null,
+            h("h1", { className: "text-lg sm:text-xl font-semibold text-slate-800" }, "Danh sách nhân sự"),
+            h("p", { className: "text-xs sm:text-sm text-slate-500" }, `Hiển thị ${filtered.length} / ${data.length} nhân sự`)
+          )
         ),
-        h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 p-3 mb-4 flex flex-col md:flex-row gap-3" },
+        
+        // Bộ lọc tối ưu Mobile
+        h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 p-2.5 sm:p-3 mb-4 flex flex-col sm:flex-row gap-2 sm:gap-3" },
           h("div", { className: "relative flex-1" },
-            h("span", { className: "absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" }, "🔎"),
+            h("span", { className: "absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" }, "🔎"),
             h("input", {
               type: "text",
-              placeholder: "Tìm theo tên, chức vụ, SĐT...",
+              placeholder: "Tìm tên, chức vụ, SĐT...",
               value: keyword,
               onChange: (e) => setKeyword(e.target.value),
               className: "w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none text-sm",
             })
           ),
-          h("select", {
-            value: donViFilter,
-            onChange: (e) => setDonViFilter(e.target.value),
-            className: "px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none",
-          },
-            h("option", { value: "" }, "Tất cả đơn vị"),
-            danhSachDonVi.map((dv) => h("option", { key: dv, value: dv }, dv))
-          ),
-          h("div", { className: "inline-flex rounded-lg border border-slate-200 overflow-hidden" },
-            ["card", "table"].map((m) =>
-              h("button", {
-                key: m,
-                onClick: () => setViewMode(m),
-                className: `px-3 py-2 text-sm font-medium ${viewMode === m ? "bg-brand-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`,
-              }, m === "card" ? "Thẻ" : "Bảng")
+          h("div", { className: "flex gap-2" },
+            h("select", {
+              value: donViFilter,
+              onChange: (e) => setDonViFilter(e.target.value),
+              className: "flex-1 sm:w-auto px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:border-brand-400 outline-none",
+            },
+              h("option", { value: "" }, "Tất cả đơn vị"),
+              danhSachDonVi.map((dv) => h("option", { key: dv, value: dv }, dv))
+            ),
+            h("div", { className: "inline-flex rounded-lg border border-slate-200 overflow-hidden shrink-0" },
+              ["card", "table"].map((m) =>
+                h("button", {
+                  key: m,
+                  onClick: () => setViewMode(m),
+                  className: `px-3 py-2 text-sm font-medium ${viewMode === m ? "bg-brand-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`,
+                }, m === "card" ? "Thẻ" : "Bảng")
+              )
             )
           )
         ),
+
         filtered.length === 0
-          ? h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 py-16 text-center" },
-              h("div", { className: "text-4xl mb-3" }, "🔍"),
-              h("p", { className: "text-slate-600 font-medium" }, "Không tìm thấy nhân sự phù hợp"),
-              h("p", { className: "text-sm text-slate-400 mt-1" }, "Thử từ khóa khác hoặc xóa bộ lọc.")
+          ? h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 py-12 text-center" },
+              h("div", { className: "text-3xl mb-2" }, "🔍"),
+              h("p", { className: "text-sm text-slate-600 font-medium" }, "Không tìm thấy nhân sự")
             )
           : viewMode === "card"
-            ? h("div", { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" },
-                filtered.map((n) =>
-                  h(NhanSuCard, {
-                    key: n.id || n.hoTen,
-                    n,
-                    onClick: () => setSelectedCanBo(n.hoTen),
-                  })
-                )
+            ? h("div", { className: "grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3" },
+                filtered.map((n) => h(NhanSuCard, { key: n.id || n.hoTen, n, onClick: () => setSelectedCanBo(n.hoTen) }))
               )
-            : h(NhanSuTable, { data: filtered, onCanBoClick: setSelectedCanBo }),
+            : h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 overflow-hidden" },
+                h("div", { className: "overflow-x-auto" },
+                  h("table", { className: "w-full text-sm" },
+                    h("thead", { className: "bg-slate-50 text-slate-500 text-[11px] sm:text-xs uppercase tracking-wide" },
+                      h("tr", null, ["Nhân sự", "Chức vụ", "SĐT", "Ngày sinh"].map((x) => h("th", { key: x, className: "px-3 sm:px-4 py-3 text-left font-medium whitespace-nowrap" }, x)))
+                    ),
+                    h("tbody", { className: "divide-y divide-slate-100" },
+                      filtered.map((n) => {
+                        const isBday = isBirthdayToday(n.ngaySinh);
+                        return h("tr", { key: n.id || n.hoTen, className: `hover:bg-slate-50 ${isBday ? "bg-pink-50/50" : ""}` },
+                          h("td", { className: "px-3 sm:px-4 py-3" },
+                            h("div", { className: "flex items-center gap-2 sm:gap-3" },
+                              h(Avatar, { src: n.avatar, name: n.hoTen, size: 32 }),
+                              h("button", { onClick: () => setSelectedCanBo(n.hoTen), className: "font-medium text-brand-700 hover:underline text-left line-clamp-2" }, n.hoTen || "—"),
+                              isBday ? h("span", null, "🎂") : null
+                            )
+                          ),
+                          h("td", { className: "px-3 sm:px-4 py-3 text-slate-700" }, n.chucVu || "—"),
+                          h("td", { className: "px-3 sm:px-4 py-3 text-slate-700 whitespace-nowrap" }, n.soDienThoai || "—"),
+                          h("td", { className: `px-3 sm:px-4 py-3 whitespace-nowrap ${isBday ? "text-pink-600 font-bold" : "text-slate-700"}` }, formatDate(n.ngaySinh))
+                        );
+                      })
+                    )
+                  )
+                )
+              ),
 
-        selectedCanBo
-          ? h(CanBoDetail, {
-              tenCanBo: selectedCanBo,
-              data: dnData,
-              onClose: () => setSelectedCanBo(null),
-            })
-          : null
+        selectedCanBo ? h(CanBoDetail, { tenCanBo: selectedCanBo, data: dnData, onClose: () => setSelectedCanBo(null) }) : null
       );
     }
 
@@ -588,12 +555,12 @@
         return data.filter((d) => normalizeMST(getMST(d)).includes(key));
       }, [mst, data]);
 
-      return h("div", { className: "bg-gradient-to-br from-brand-600 to-brand-800 rounded-2xl shadow-pop p-6 mb-6 text-white" },
-        h("div", { className: "flex items-start gap-3 mb-4" },
-          h("div", { className: "w-10 h-10 rounded-lg bg-white/15 flex items-center justify-center text-xl" }, "🔍"),
+      return h("div", { className: "bg-gradient-to-br from-brand-600 to-brand-800 rounded-2xl shadow-pop p-4 sm:p-6 mb-5 text-white" },
+        h("div", { className: "flex items-start gap-2 sm:gap-3 mb-3 sm:mb-4" },
+          h("div", { className: "w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-white/15 flex items-center justify-center text-lg sm:text-xl shrink-0" }, "🔍"),
           h("div", null,
-            h("h2", { className: "text-lg font-semibold" }, "Tra cứu cán bộ quản lý theo MST"),
-            h("p", { className: "text-sm text-white/70" }, "Nhập mã số thuế (có thể nhập một phần) để tìm cán bộ phụ trách.")
+            h("h2", { className: "text-base sm:text-lg font-semibold" }, "Tra cứu MST"),
+            h("p", { className: "text-[11px] sm:text-sm text-white/70" }, "Nhập MST để tìm cán bộ phụ trách.")
           )
         ),
         h("input", {
@@ -601,40 +568,25 @@
           placeholder: "Ví dụ: 0101234567",
           value: mst,
           onChange: (e) => setMst(e.target.value),
-          className: "w-full px-4 py-2.5 rounded-lg bg-white/95 text-slate-800 placeholder-slate-400 outline-none focus:ring-2 focus:ring-white/60 text-sm",
+          className: "w-full px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg bg-white/95 text-slate-800 placeholder-slate-400 outline-none focus:ring-2 focus:ring-white/60 text-sm",
         }),
-        ketQua === null
-          ? null
+        ketQua === null ? null
           : ketQua.length === 0
-            ? h("div", { className: "mt-4 text-sm bg-rose-500/20 ring-1 ring-rose-300/40 rounded-lg p-3" },
-                `Không tìm thấy doanh nghiệp có MST chứa "${mst}".`
-              )
-            : h("div", { className: "mt-4 space-y-3" },
+            ? h("div", { className: "mt-3 text-xs sm:text-sm bg-rose-500/20 ring-1 ring-rose-300/40 rounded-lg p-2.5" }, `Không tìm thấy MST "${mst}".`)
+            : h("div", { className: "mt-3 space-y-2 sm:space-y-3" },
                 ketQua.map((d, i) =>
-                  h("div", { key: i, className: "bg-white text-slate-800 rounded-xl p-4 shadow-card" },
-                    h("div", { className: "flex items-center justify-between gap-3" },
+                  h("div", { key: i, className: "bg-white text-slate-800 rounded-xl p-3 sm:p-4 shadow-card" },
+                    h("div", { className: "flex flex-wrap items-center justify-between gap-2" },
                       h("div", null,
-                        h("p", { className: "text-xs text-slate-500" }, "MST"),
-                        h("p", { className: "font-mono font-semibold text-slate-800" }, getMST(d) || "—")
+                        h("p", { className: "text-[10px] text-slate-500" }, "MST"),
+                        h("p", { className: "font-mono font-semibold text-slate-800 text-sm" }, getMST(d) || "—")
                       ),
                       h(Badge, { color: "blue" }, d["CQT quản lý"] || "—")
                     ),
-                    h("p", { className: "font-semibold text-brand-700 mt-2" }, d["Tên NNT"] || "—"),
-                    h("div", { className: "mt-3 grid sm:grid-cols-2 gap-3 text-sm" },
-                      h("div", { className: "flex items-center gap-2" },
-                        h("span", { className: "text-slate-400" }, "👤"),
-                        h("span", { className: "text-slate-500" }, "Cán bộ:"),
-                        h("span", { className: "font-medium text-slate-800" }, d["Tên cán bộ quản lý"] || "—")
-                      ),
-                      h("div", { className: "flex items-center gap-2" },
-                        h("span", { className: "text-slate-400" }, "🆔"),
-                        h("span", { className: "text-slate-500" }, "Mã CB:"),
-                        h("span", { className: "font-medium text-slate-800" }, d["Mã cán bộ"] || "—")
-                      ),
-                      h("div", { className: "flex items-center gap-2" },
-                        h("span", { className: "text-slate-400" }, "🏢"),
-                        h("span", { className: "text-slate-500" }, "Phòng:"),
-                        h("span", { className: "font-medium text-slate-800" }, d["Tên phòng"] || "—")
+                    h("p", { className: "font-semibold text-brand-700 mt-1.5 text-sm sm:text-base" }, d["Tên NNT"] || "—"),
+                    h("div", { className: "mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] sm:text-sm" },
+                      h("div", { className: "flex items-center gap-1.5" },
+                        h("span", { className: "text-slate-400" }, "👤"), h("span", { className: "text-slate-500" }, "Cán bộ:"), h("span", { className: "font-medium text-slate-800" }, d["Tên cán bộ quản lý"] || "—")
                       )
                     )
                   )
@@ -643,164 +595,112 @@
       );
     }
 
-    // ====== DOANH NGHIỆP ======
+    // ====== DOANH NGHIỆP VIEW ======
     function DoanhNghiepView({ dnData, dnLoading, dnError }) {
       const data = dnData;
       const [keyword, setKeyword] = useState("");
       const [cqtFilter, setCqtFilter] = useState("");
-      const [canBoFilter, setCanBoFilter] = useState("");
       const [selectedCanBo, setSelectedCanBo] = useState(null);
 
-      const danhSachCQT = useMemo(
-        () => [...new Set(data.map((d) => d["CQT quản lý"]).filter(Boolean))].sort(),
-        [data]
-      );
-      const danhSachCanBo = useMemo(
-        () => [...new Set(data.map((d) => d["Tên cán bộ quản lý"]).filter(Boolean))].sort(),
-        [data]
-      );
+      const danhSachCQT = useMemo(() => [...new Set(data.map((d) => d["CQT quản lý"]).filter(Boolean))].sort(), [data]);
+      
       const filtered = useMemo(() => {
         const kw = keyword.toLowerCase();
         return data.filter((d) => {
-          const okKw =
-            (d["Tên NNT"] || "").toLowerCase().includes(kw) ||
-            (getMST(d) || "").toLowerCase().includes(kw) ||
-            (d["Mã cán bộ"] || "").toLowerCase().includes(kw) ||
-            (d["Tên cán bộ quản lý"] || "").toLowerCase().includes(kw) ||
-            (d["Tên phòng"] || "").toLowerCase().includes(kw);
-          const okCQT = cqtFilter ? d["CQT quản lý"] === cqtFilter : true;
-          const okCB = canBoFilter ? d["Tên cán bộ quản lý"] === canBoFilter : true;
-          return okKw && okCQT && okCB;
+          const okKw = (d["Tên NNT"] || "").toLowerCase().includes(kw) || (getMST(d) || "").toLowerCase().includes(kw) || (d["Tên cán bộ quản lý"] || "").toLowerCase().includes(kw);
+          return okKw && (cqtFilter ? d["CQT quản lý"] === cqtFilter : true);
         });
-      }, [data, keyword, cqtFilter, canBoFilter]);
+      }, [data, keyword, cqtFilter]);
 
       if (dnLoading) return h(TableSkeleton);
       if (dnError) return h(ErrorBox, { error: dnError });
 
       return h("div", null,
         h(TraCuuMST, { data }),
-        h("div", { className: "mb-4" },
-          h("h1", { className: "text-xl font-semibold text-slate-800" }, "Danh sách doanh nghiệp"),
-          h("p", { className: "text-sm text-slate-500" }, `Hiển thị ${filtered.length} / ${data.length} doanh nghiệp`)
+        h("div", { className: "mb-3" },
+          h("h1", { className: "text-lg sm:text-xl font-semibold text-slate-800" }, "Danh sách doanh nghiệp"),
+          h("p", { className: "text-xs sm:text-sm text-slate-500" }, `Hiển thị ${filtered.length} / ${data.length} doanh nghiệp`)
         ),
-        h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 p-3 mb-4 flex flex-col md:flex-row gap-3" },
+        h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 p-2.5 mb-4 flex flex-col sm:flex-row gap-2" },
           h("div", { className: "relative flex-1" },
-            h("span", { className: "absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" }, "🔎"),
+            h("span", { className: "absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" }, "🔎"),
             h("input", {
               type: "text",
-              placeholder: "Tìm theo tên NNT, MST, cán bộ, phòng...",
+              placeholder: "Tìm tên NNT, MST, cán bộ...",
               value: keyword,
               onChange: (e) => setKeyword(e.target.value),
-              className: "w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none text-sm",
+              className: "w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 focus:border-brand-400 outline-none text-sm",
             })
           ),
           h("select", {
             value: cqtFilter,
             onChange: (e) => setCqtFilter(e.target.value),
-            className: "px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none",
+            className: "px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:border-brand-400 outline-none",
           },
             h("option", { value: "" }, "Tất cả CQT"),
             danhSachCQT.map((x) => h("option", { key: x, value: x }, x))
-          ),
-          h("select", {
-            value: canBoFilter,
-            onChange: (e) => setCanBoFilter(e.target.value),
-            className: "px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none",
-          },
-            h("option", { value: "" }, "Tất cả cán bộ"),
-            danhSachCanBo.map((x) => h("option", { key: x, value: x }, x))
           )
         ),
         filtered.length === 0
-          ? h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 py-16 text-center" },
-              h("div", { className: "text-4xl mb-3" }, "🏢"),
-              h("p", { className: "text-slate-600 font-medium" }, "Không tìm thấy doanh nghiệp phù hợp"),
-              h("p", { className: "text-sm text-slate-400 mt-1" }, "Thử từ khóa khác hoặc xóa bộ lọc.")
-            )
+          ? h("div", { className: "bg-white rounded-xl shadow-card py-12 text-center" }, h("p", { className: "text-sm text-slate-600" }, "Không tìm thấy dữ liệu."))
           : h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 overflow-hidden" },
-              h("div", { className: "overflow-x-auto max-h-[70vh]" },
+              h("div", { className: "overflow-x-auto" },
                 h("table", { className: "w-full text-sm" },
-                  h("thead", { className: "bg-slate-50 text-slate-500 text-xs uppercase tracking-wide sticky top-0 z-10" },
-                    h("tr", null,
-                      [
-                        "Mã số thuế", "CQT quản lý", "Tên NNT", "Mã phòng", "Tên phòng",
-                        "Mã cán bộ", "Tên cán bộ quản lý", "Người tạo", "Ngày tạo", "Thời gian tạo",
-                        "Thay đổi bởi", "Ngày thay đổi", "Thời gian thay đổi",
-                      ].map((x) => h("th", { key: x, className: "px-4 py-3 text-left font-medium whitespace-nowrap" }, x))
-                    )
+                  h("thead", { className: "bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wide" },
+                    h("tr", null, ["Mã số thuế", "Tên NNT", "Cán bộ quản lý"].map((x) => h("th", { key: x, className: "px-3 sm:px-4 py-3 text-left font-medium whitespace-nowrap" }, x)))
                   ),
                   h("tbody", { className: "divide-y divide-slate-100" },
                     filtered.map((d, i) =>
                       h("tr", { key: i, className: "hover:bg-slate-50/70" },
-                        h("td", { className: "px-4 py-3 font-mono text-xs text-slate-700 whitespace-nowrap" }, getMST(d) || "—"),
-                        h("td", { className: "px-4 py-3 whitespace-nowrap" }, h(Badge, { color: "slate" }, d["CQT quản lý"] || "—")),
-                        h("td", { className: "px-4 py-3 font-medium text-slate-800" }, d["Tên NNT"] || "—"),
-                        h("td", { className: "px-4 py-3 text-slate-600" }, d["Mã phòng quản lý"] || "—"),
-                        h("td", { className: "px-4 py-3 text-slate-600" }, d["Tên phòng"] || "—"),
-                        h("td", { className: "px-4 py-3 text-slate-600" }, d["Mã cán bộ"] || "—"),
-                        h("td", { className: "px-4 py-3 whitespace-nowrap" },
+                        h("td", { className: "px-3 sm:px-4 py-3 font-mono text-[11px] text-slate-700 whitespace-nowrap" }, getMST(d) || "—"),
+                        h("td", { className: "px-3 sm:px-4 py-3 font-medium text-slate-800 min-w-[150px]" }, d["Tên NNT"] || "—"),
+                        h("td", { className: "px-3 sm:px-4 py-3 whitespace-nowrap" },
                           d["Tên cán bộ quản lý"]
-                            ? h("button", {
-                                onClick: () => setSelectedCanBo(d["Tên cán bộ quản lý"]),
-                                className: "inline-flex items-center gap-1.5 text-brand-700 hover:text-brand-800 hover:underline font-medium",
-                                title: "Xem danh sách doanh nghiệp được quản lý",
-                              },
-                                h("span", { className: "w-1.5 h-1.5 rounded-full bg-brand-500" }),
-                                d["Tên cán bộ quản lý"]
-                              )
+                            ? h("button", { onClick: () => setSelectedCanBo(d["Tên cán bộ quản lý"]), className: "text-brand-700 hover:underline font-medium" }, d["Tên cán bộ quản lý"])
                             : "—"
-                        ),
-                        h("td", { className: "px-4 py-3 text-slate-600" }, getVal(d, "Người tạo", "Người tạo") || "—"),
-                        h("td", { className: "px-4 py-3 text-slate-600 whitespace-nowrap" }, formatDate(getVal(d, "Ngày tạo", "Ngày tạo"))),
-                        h("td", { className: "px-4 py-3 text-slate-600 whitespace-nowrap" }, d["Thời gian tạo"] || "—"),
-                        h("td", { className: "px-4 py-3 text-slate-600" }, getVal(d, "Thay đổi bởi", "Thay đổi bởi") || "—"),
-                        h("td", { className: "px-4 py-3 text-slate-600 whitespace-nowrap" }, formatDate(d["Ngày thay đổi"])),
-                        h("td", { className: "px-4 py-3 text-slate-600 whitespace-nowrap" }, d["Thời gian thay đổi"] || "—")
+                        )
                       )
                     )
                   )
                 )
               )
             ),
-        selectedCanBo
-          ? h(CanBoDetail, {
-              tenCanBo: selectedCanBo,
-              data,
-              onClose: () => setSelectedCanBo(null),
-            })
-          : null
+        selectedCanBo ? h(CanBoDetail, { tenCanBo: selectedCanBo, data, onClose: () => setSelectedCanBo(null) }) : null
       );
     }
 
-    // ====== LAYOUT ======
+    // ====== HEADER & LAYOUT (Đã fix Mobile) ======
     function Header({ tab, setTab }) {
       const tabs = [
         { id: "nhansu", label: "Nhân sự", icon: "👥" },
         { id: "doanhnghiep", label: "Doanh nghiệp", icon: "🏢" },
       ];
-      return h("header", { className: "sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200" },
-        h("div", { className: "max-w-7xl mx-auto px-6" },
-          h("div", { className: "h-16 flex items-center justify-between gap-4" },
-            h("div", { className: "flex items-center gap-3" },
-              h("div", { className: "w-9 h-9 rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-white flex items-center justify-center font-bold shadow-card" }, "Q"),
+      
+      return h("header", { className: "sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200" },
+        h("div", { className: "max-w-7xl mx-auto px-3 sm:px-6" },
+          h("div", { className: "h-14 sm:h-16 flex items-center justify-between gap-2" },
+            
+            // Logo & Title
+            h("div", { className: "flex items-center gap-2 shrink-0" },
+              h("div", { className: "w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-brand-600 text-white flex items-center justify-center font-bold shadow-sm" }, "Q"),
               h("div", { className: "leading-tight" },
-                h("p", { className: "font-semibold text-slate-800" }, APP_NAME),
-                h("p", { className: "text-xs text-slate-500" }, APP_SUB)
+                h("p", { className: "font-bold text-slate-800 text-[13px] sm:text-base whitespace-nowrap" }, "Phòng QLHTDN"),
+                h("p", { className: "text-[10px] sm:text-xs text-slate-500 whitespace-nowrap" }, "Nhân sự & Doanh nghiệp")
               )
             ),
-            h("nav", { className: "flex items-center gap-1" },
+
+            // Tabs (Không bị rớt dòng)
+            h("nav", { className: "flex items-center bg-slate-100 p-1 rounded-lg shrink-0" },
               tabs.map((t) =>
                 h("button", {
                   key: t.id,
                   onClick: () => setTab(t.id),
-                  className: `px-3 py-2 rounded-lg text-sm font-medium transition ${
-                    tab === t.id
-                      ? "bg-brand-50 text-brand-700 ring-1 ring-brand-100"
-                      : "text-slate-600 hover:bg-slate-100"
+                  className: `px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition flex items-center gap-1.5 ${
+                    tab === t.id ? "bg-white text-brand-700 shadow-sm ring-1 ring-slate-200" : "text-slate-600 hover:text-slate-900"
                   }`,
                 },
-                  h("span", { className: "mr-1.5" }, t.icon),
-                  t.label
+                  h("span", { className: "text-sm sm:text-base" }, t.icon),
+                  h("span", { className: "hidden xs:inline" }, t.label) // Ẩn chữ trên màn hình siêu nhỏ, chỉ hiện icon
                 )
               )
             )
@@ -814,19 +714,13 @@
       const dn = useDoanhNghiepData();
       return h("div", { className: "min-h-screen flex flex-col" },
         h(Header, { tab, setTab }),
-        h("main", { className: "flex-1 max-w-7xl w-full mx-auto px-6 py-6" },
-          tab === "nhansu"
-            ? h(NhanSuView, { dnData: dn.data })
-            : h(DoanhNghiepView, {
-                dnData: dn.data,
-                dnLoading: dn.loading,
-                dnError: dn.error,
-              })
+        h("main", { className: "flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6" },
+          tab === "nhansu" ? h(NhanSuView, { dnData: dn.data }) : h(DoanhNghiepView, { dnData: dn.data, dnLoading: dn.loading, dnError: dn.error })
         ),
         h("footer", { className: "border-t border-slate-200 bg-white" },
-          h("div", { className: "max-w-7xl mx-auto px-6 py-4 text-xs text-slate-500 flex items-center justify-between" },
+          h("div", { className: "max-w-7xl mx-auto px-3 sm:px-6 py-3 text-[10px] sm:text-xs text-slate-500 flex items-center justify-between" },
             h("span", null, "© ", new Date().getFullYear(), " ", APP_NAME),
-            h("span", null, "Dữ liệu từ Google Sheets")
+            h("span", null, "Dữ liệu: Google Sheets")
           )
         )
       );
