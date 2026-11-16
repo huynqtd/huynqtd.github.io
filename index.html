@@ -48,8 +48,6 @@
     ::-webkit-scrollbar { height: 6px; width: 6px; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-    /* Ngăn ngừa rớt dòng trên mobile */
-    .no-wrap { white-space: nowrap; }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased">
@@ -434,7 +432,7 @@
               h("span", { className: isBday ? "" : "text-slate-400 shrink-0" }, "🎂"), formatDate(n.ngaySinh)
             )
           )
-        }
+        )
       );
     }
 
@@ -688,7 +686,7 @@
         h("div", { className: "max-w-7xl mx-auto px-3 sm:px-6" },
           h("div", { className: "h-14 sm:h-16 flex items-center justify-between gap-2" },
             
-            // Logo & Title - Dùng whitespace-nowrap để không rớt dòng
+            // Logo & Title
             h("div", { className: "flex items-center gap-2 shrink-0" },
               h("div", { className: "w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-brand-600 text-white flex items-center justify-center font-bold shadow-sm shrink-0" }, "Q"),
               h("div", { className: "leading-tight" },
@@ -697,7 +695,7 @@
               )
             ),
 
-            // Tabs - Tối ưu cho mobile
+            // Tabs
             h("nav", { className: "flex items-center bg-slate-100 p-1 rounded-lg shrink-0" },
               tabs.map((t) =>
                 h("button", {
@@ -708,7 +706,7 @@
                   }`,
                 },
                   h("span", { className: "text-sm sm:text-base" }, t.icon),
-                  h("span", { className: "hidden xs:inline" }, t.label)
+                  h("span", { className: "hidden sm:inline" }, t.label)
                 )
               )
             )
