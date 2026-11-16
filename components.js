@@ -288,8 +288,17 @@
                 h("td", { className: "px-3 sm:px-4 py-3" },
                   h("div", { className: "flex items-center gap-2 sm:gap-3" },
                     h(Avatar, { src: n.avatar, name: n.hoTen, size: 32 }),
+                    // SỬA TẠI ĐÂY: Thêm type="button" và ngăn chặn sự kiện lan truyền
                     onCanBoClick
-                      ? h("button", { onClick: () => onCanBoClick(n.hoTen), className: "font-medium text-brand-700 hover:underline text-left line-clamp-2" }, n.hoTen || "—")
+                      ? h("button", { 
+                          type: "button",
+                          onClick: (e) => { 
+                            e.preventDefault(); 
+                            e.stopPropagation(); 
+                            onCanBoClick(n.hoTen); 
+                          }, 
+                          className: "font-medium text-brand-700 hover:underline text-left line-clamp-2" 
+                        }, n.hoTen || "—")
                       : h("span", { className: "font-medium text-slate-800 line-clamp-2" }, n.hoTen || "—"),
                     isBday ? h("span", null, "🎂") : null
                   )
