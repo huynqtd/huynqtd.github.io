@@ -1,25 +1,18 @@
 /**
  * hooks.js
  * Chứa các custom hook để tải và quản lý dữ liệu từ Google Sheets.
- * Yêu cầu: index.html phải load trước các file config.js (chứa SHEET_ID, csvUrl, getMST, h...)
- * và thư viện PapaParse (papaparse.min.js).
+ * Yêu cầu: nạp SAU config.js và papaparse.min.js.
  */
-
 (function () {
   "use strict";
 
   const { useState, useEffect } = React;
 
-  // ============================================================
-  // HOOK CHÍNH: Tải dữ liệu từ Google Sheets qua CSV
-  // ============================================================
-  /**
-   * @param {string} gid - ID của sheet (tab) cần tải
-   * @param {Object} options
-   * @param {Function} options.filterEmpty - Hàm lọc các dòng rỗng (nhận vào 1 row, trả về true/false)
-   * @param {number} [options.cacheMinutes=5] - Số phút cache dữ liệu (mặc định 5 phút)
-   * @returns {{ data: Array, loading: boolean, error: Error|null }}
-   */
+  // Đưa filter ra ngoài — ổn định, không tạo mới mỗi render
+  const filterNhanSu = (r) => !!(r.id || r.hoTen || r["Họ và tên"]);
+  const filterDoanhNghiep = (r) =>
+    !!(r["Tên NNT"] || window.getMST(r) || r["Mã cán bộ"]);
+
   function useSheetData(gid, { filterEmpty, cacheMinutes = 5 }) {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -29,59 +22,56 @@
       let cancelled = false;
       const cacheKey = `sheet_cache_${gid}`;
 
-      // 1. Thử đọc từ sessionStorage trước (để tải tức thì khi chuyển tab qua lại)
+      // 1. Đọc cache và hiển thị ngay (nếu có) — nhưng KHÔNG return,
+      //    vẫn fetch ngầm để cập nhật dữ liệu mới nhất.
+      let hasCache = false;
       try {
         const cached = sessionStorage.getItem(cacheKey);
         if (cached) {
           const parsed = JSON.parse(cached);
-          if (parsed.timestamp && Date.now() - parsed.timestamp < cacheMinutes * 60 * 1000) {
+          if (
+            parsed.timestamp &&
+            Date.now() - parsed.timestamp < cacheMinutes * 60 * 1000
+          ) {
             setData(parsed.data);
             setLoading(false);
-            return; // Dùng cache, không gọi lại API
+            hasCache = true;
           }
         }
       } catch (e) {
-        // sessionStorage có thể bị chặn (chế độ ẩn danh), bỏ qua và tải mới
+        // sessionStorage có thể bị chặn — bỏ qua
       }
 
-      // 2. Tải dữ liệu từ Google Sheets
-      setLoading(true);
+      if (!hasCache) {
+        setLoading(true);
+      }
       setError(null);
 
-      fetch(csvUrl(gid))
+      // 2. Luôn fetch để revalidate (stale-while-revalidate)
+      fetch(window.csvUrl(gid))
         .then((res) => {
-          if (!res.ok) {
-            throw new Error(`HTTP ${res.status} – không tải được sheet (gid=${gid})`);
-          }
+          if (!res.ok) throw new Error(`HTTP ${res.status} – không tải được sheet (gid=${gid})`);
           return res.text();
         })
         .then((csv) => {
           if (cancelled) return;
-
-          // Kiểm tra xem Google trả về HTML (lỗi quyền truy cập) thay vì CSV
           if (csv.trim().startsWith("<")) {
             throw new Error(
-              "Sheet chưa được public hoặc bạn không có quyền truy cập. " +
-              "Vào Google Sheets → Share → Anyone with the link → Viewer."
+              "Sheet chưa được public. Vào Google Sheets → Share → Anyone with the link → Viewer."
             );
           }
 
-          // Parse CSV bằng PapaParse
           const { data: rows, errors } = Papa.parse(csv, {
             header: true,
             skipEmptyLines: true,
-            transformHeader: (h) => h.trim(), // Xóa khoảng trắng thừa ở tên cột
+            transformHeader: (h) => h.trim(),
           });
 
-          // Nếu PapaParse báo lỗi nghiêm trọng (không phải lỗi field rỗng)
           if (errors && errors.length > 0) {
-            const fatalErrors = errors.filter((e) => e.type === "Quotes" || e.type === "Delimiter");
-            if (fatalErrors.length > 0) {
-              console.warn("PapaParse cảnh báo:", fatalErrors);
-            }
+            const fatal = errors.filter((e) => e.type === "Quotes" || e.type === "Delimiter");
+            if (fatal.length > 0) console.warn("PapaParse:", fatal);
           }
 
-          // Làm sạch dữ liệu
           const cleaned = rows
             .map((r) => {
               const o = {};
@@ -94,62 +84,56 @@
 
           if (cleaned.length === 0) {
             throw new Error(
-              "Không có dòng dữ liệu nào. Kiểm tra lại: (1) tên cột trong Sheet có khớp code không, " +
-              "(2) sheet có dữ liệu thật không, (3) gid có đúng không."
+              "Không có dòng dữ liệu. Kiểm tra: (1) tên cột trong Sheet, (2) sheet có dữ liệu thật, (3) gid."
             );
           }
 
           setData(cleaned);
 
-          // 3. Lưu vào sessionStorage để lần sau tải nhanh hơn
           try {
-            sessionStorage.setItem(cacheKey, JSON.stringify({
-              timestamp: Date.now(),
-              data: cleaned,
-            }));
+            sessionStorage.setItem(
+              cacheKey,
+              JSON.stringify({ timestamp: Date.now(), data: cleaned })
+            );
           } catch (e) {
-            // Nếu vượt quá dung lượng (~5MB) thì bỏ qua, không quan trọng
+            /* Bỏ qua nếu vượt dung lượng */
           }
         })
         .catch((e) => {
           if (cancelled) return;
           console.error(`[useSheetData] Lỗi khi tải gid=${gid}:`, e);
-          setError(e);
+          // Chỉ set error nếu CHƯA có data (để không mất cache khi mất mạng tạm thời)
+          setError((prev) => (hasCache ? null : e));
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
         });
 
-      return () => { cancelled = true; };
-    }, [gid, cacheMinutes]); // filterEmpty nên là hàm stable, không cần vào deps
+      return () => {
+        cancelled = true;
+      };
+    }, [gid, cacheMinutes]);
 
     return { data, loading, error };
   }
 
   // ============================================================
-  // WRAPPER HOOK: Nhân sự
+  // WRAPPER HOOKS
   // ============================================================
   function useNhanSuData() {
-    return useSheetData(GID_NHANSU, {
-      // Chỉ lấy dòng có ít nhất 1 trong 2 trường quan trọng
-      filterEmpty: (r) => !!(r.id || r.hoTen || r["Họ và tên"]),
-    });
+    return useSheetData(window.GID_NHANSU, { filterEmpty: filterNhanSu });
   }
 
-  // ============================================================
-  // WRAPPER HOOK: Doanh nghiệp
-  // ============================================================
   function useDoanhNghiepData() {
-    return useSheetData(GID_DOANHNGHIEP, {
-      // Chỉ lấy dòng có tên NNT, MST, hoặc mã cán bộ
-      filterEmpty: (r) => !!(r["Tên NNT"] || getMST(r) || r["Mã cán bộ"]),
+    return useSheetData(window.GID_DOANHNGHIEP, {
+      filterEmpty: filterDoanhNghiep,
     });
   }
 
-  // ============================================================
-  // EXPORT GLOBAL (vì không dùng ES6 module, ta gắn vào window)
-  // ============================================================
+  // Gắn global
   window.useSheetData = useSheetData;
   window.useNhanSuData = useNhanSuData;
   window.useDoanhNghiepData = useDoanhNghiepData;
+
+  console.log("[hooks.js] ✅ Đã nạp custom hooks");
 })();
