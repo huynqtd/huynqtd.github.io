@@ -397,4 +397,252 @@
               }, m === "card" ? "Thẻ" : "Bảng")
             )
           )
-       
+        )
+      ),
+
+      filtered.length === 0
+        ? h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 py-12 text-center" },
+            h("div", { className: "text-3xl mb-2" }, "🔍"),
+            h("p", { className: "text-sm text-slate-600 font-medium" }, "Không tìm thấy nhân sự")
+          )
+        : viewMode === "card"
+        ? h("div", { className: "grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3" },
+            filtered.map((n) =>
+              h(NhanSuCard, {
+                key: n.id || n.hoTen,
+                n,
+                onClick: () => setSelectedCanBo(n.hoTen),
+              })
+            )
+          )
+        : h(NhanSuTable, { data: filtered, onCanBoClick: setSelectedCanBo }),
+
+      selectedCanBo
+        ? h(CanBoDetail, {
+            tenCanBo: selectedCanBo,
+            data: dnData,
+            onClose: () => setSelectedCanBo(null),
+          })
+        : null
+    );
+  }
+
+  // ============================================================
+  // TRA CỨU MST
+  // ============================================================
+  function TraCuuMST({ data }) {
+    const [mst, setMst] = useState("");
+    const ketQua = useMemo(() => {
+      const key = normalizeMST(mst);
+      if (!key) return null;
+      return data.filter((d) => normalizeMST(getMST(d)).includes(key));
+    }, [mst, data]);
+
+    return h("div", { className: "bg-gradient-to-br from-brand-600 to-brand-800 rounded-2xl shadow-pop p-4 sm:p-6 mb-5 text-white" },
+      h("div", { className: "flex items-start gap-2 sm:gap-3 mb-3 sm:mb-4" },
+        h("div", { className: "w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-white/15 flex items-center justify-center text-lg sm:text-xl shrink-0" }, "🔍"),
+        h("div", null,
+          h("h2", { className: "text-base sm:text-lg font-semibold" }, "Tra cứu MST"),
+          h("p", { className: "text-[11px] sm:text-sm text-white/70" }, "Nhập MST để tìm cán bộ phụ trách.")
+        )
+      ),
+      h("input", {
+        type: "text",
+        placeholder: "Ví dụ: 0101234567",
+        value: mst,
+        onChange: (e) => setMst(e.target.value),
+        className: "w-full px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg bg-white/95 text-slate-800 placeholder-slate-400 outline-none focus:ring-2 focus:ring-white/60 text-sm",
+      }),
+      ketQua === null
+        ? null
+        : ketQua.length === 0
+        ? h("div", { className: "mt-3 text-xs sm:text-sm bg-rose-500/20 ring-1 ring-rose-300/40 rounded-lg p-2.5" },
+            `Không tìm thấy MST "${mst}".`
+          )
+        : h("div", { className: "mt-3 space-y-2 sm:space-y-3" },
+            ketQua.map((d, i) =>
+              h("div", { key: i, className: "bg-white text-slate-800 rounded-xl p-3 sm:p-4 shadow-card" },
+                h("div", { className: "flex flex-wrap items-center justify-between gap-2" },
+                  h("div", null,
+                    h("p", { className: "text-[10px] text-slate-500" }, "MST"),
+                    h("p", { className: "font-mono font-semibold text-slate-800 text-sm" }, getMST(d) || "—")
+                  ),
+                  h(Badge, { color: "blue" }, d["CQT quản lý"] || "—")
+                ),
+                h("p", { className: "font-semibold text-brand-700 mt-1.5 text-sm sm:text-base" }, d["Tên NNT"] || "—"),
+                h("div", { className: "mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] sm:text-sm" },
+                  h("div", { className: "flex items-center gap-1.5" },
+                    h("span", { className: "text-slate-400" }, "👤"),
+                    h("span", { className: "text-slate-500" }, "Cán bộ:"),
+                    h("span", { className: "font-medium text-slate-800" }, d["Tên cán bộ quản lý"] || "—")
+                  )
+                )
+              )
+            )
+          )
+    );
+  }
+
+  // ============================================================
+  // DOANH NGHIỆP
+  // ============================================================
+  function DoanhNghiepView({ dnData, dnLoading, dnError }) {
+    const data = dnData;
+    const [keyword, setKeyword] = useState("");
+    const [cqtFilter, setCqtFilter] = useState("");
+    const [selectedCanBo, setSelectedCanBo] = useState(null);
+
+    const danhSachCQT = useMemo(
+      () => [...new Set(data.map((d) => d["CQT quản lý"]).filter(Boolean))].sort(),
+      [data]
+    );
+
+    const filtered = useMemo(() => {
+      const kw = keyword.toLowerCase();
+      return data.filter((d) => {
+        const okKw =
+          (d["Tên NNT"] || "").toLowerCase().includes(kw) ||
+          (getMST(d) || "").toLowerCase().includes(kw) ||
+          (d["Tên cán bộ quản lý"] || "").toLowerCase().includes(kw);
+        return okKw && (cqtFilter ? d["CQT quản lý"] === cqtFilter : true);
+      });
+    }, [data, keyword, cqtFilter]);
+
+    if (dnLoading) return h(TableSkeleton);
+    if (dnError) return h(ErrorBox, { error: dnError });
+
+    return h("div", null,
+      h(TraCuuMST, { data }),
+      h("div", { className: "mb-3" },
+        h("h1", { className: "text-lg sm:text-xl font-semibold text-slate-800" }, "Danh sách doanh nghiệp"),
+        h("p", { className: "text-xs sm:text-sm text-slate-500" }, `Hiển thị ${filtered.length} / ${data.length} doanh nghiệp`)
+      ),
+      h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 p-2.5 mb-4 flex flex-col sm:flex-row gap-2" },
+        h("div", { className: "relative flex-1" },
+          h("span", { className: "absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" }, "🔎"),
+          h("input", {
+            type: "text",
+            placeholder: "Tìm tên NNT, MST, cán bộ...",
+            value: keyword,
+            onChange: (e) => setKeyword(e.target.value),
+            className: "w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 focus:border-brand-400 outline-none text-sm",
+          })
+        ),
+        h("select", {
+          value: cqtFilter,
+          onChange: (e) => setCqtFilter(e.target.value),
+          className: "px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:border-brand-400 outline-none",
+        },
+          h("option", { value: "" }, "Tất cả CQT"),
+          danhSachCQT.map((x) => h("option", { key: x, value: x }, x))
+        )
+      ),
+      filtered.length === 0
+        ? h("div", { className: "bg-white rounded-xl shadow-card py-12 text-center" },
+            h("p", { className: "text-sm text-slate-600" }, "Không tìm thấy dữ liệu.")
+          )
+        : h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 overflow-hidden" },
+            h("div", { className: "overflow-x-auto" },
+              h("table", { className: "w-full text-sm" },
+                h("thead", { className: "bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wide" },
+                  h("tr", null,
+                    ["Mã số thuế", "Tên NNT", "Cán bộ quản lý"].map((x) =>
+                      h("th", { key: x, className: "px-3 sm:px-4 py-3 text-left font-medium whitespace-nowrap" }, x)
+                    )
+                  )
+                ),
+                h("tbody", { className: "divide-y divide-slate-100" },
+                  filtered.map((d, i) =>
+                    h("tr", { key: i, className: "hover:bg-slate-50/70" },
+                      h("td", { className: "px-3 sm:px-4 py-3 font-mono text-[11px] text-slate-700 whitespace-nowrap" }, getMST(d) || "—"),
+                      h("td", { className: "px-3 sm:px-4 py-3 font-medium text-slate-800 min-w-[150px]" }, d["Tên NNT"] || "—"),
+                      h("td", { className: "px-3 sm:px-4 py-3 whitespace-nowrap" },
+                        d["Tên cán bộ quản lý"]
+                          ? h("button", {
+                              onClick: () => setSelectedCanBo(d["Tên cán bộ quản lý"]),
+                              className: "text-brand-700 hover:underline font-medium",
+                            }, d["Tên cán bộ quản lý"])
+                          : "—"
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          ),
+      selectedCanBo
+        ? h(CanBoDetail, {
+            tenCanBo: selectedCanBo,
+            data,
+            onClose: () => setSelectedCanBo(null),
+          })
+        : null
+    );
+  }
+
+  // ============================================================
+  // HEADER & APP
+  // ============================================================
+  function Header({ tab, setTab }) {
+    const tabs = [
+      { id: "nhansu", label: "Nhân sự", icon: "👥" },
+      { id: "doanhnghiep", label: "Doanh nghiệp", icon: "🏢" },
+    ];
+
+    return h("header", { className: "sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200" },
+      h("div", { className: "max-w-7xl mx-auto px-3 sm:px-6" },
+        h("div", { className: "h-14 sm:h-16 flex items-center justify-between gap-2" },
+          h("div", { className: "flex items-center gap-2 shrink-0" },
+            h("div", { className: "w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-brand-600 text-white flex items-center justify-center font-bold shadow-sm" }, "Q"),
+            h("div", { className: "leading-tight" },
+              h("p", { className: "font-bold text-slate-800 text-[13px] sm:text-base whitespace-nowrap" }, "Phòng QLHTDN"),
+              h("p", { className: "text-[10px] sm:text-xs text-slate-500 whitespace-nowrap" }, "Nhân sự & Doanh nghiệp")
+            )
+          ),
+          h("nav", { className: "flex items-center bg-slate-100 p-1 rounded-lg shrink-0" },
+            tabs.map((t) =>
+              h("button", {
+                key: t.id,
+                onClick: () => setTab(t.id),
+                className: `px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition flex items-center gap-1.5 ${
+                  tab === t.id ? "bg-white text-brand-700 shadow-sm ring-1 ring-slate-200" : "text-slate-600 hover:text-slate-900"
+                }`,
+              },
+                h("span", { className: "text-sm sm:text-base" }, t.icon),
+                h("span", { className: "hidden xs:inline" }, t.label)
+              )
+            )
+          )
+        )
+      )
+    );
+  }
+
+  function App() {
+    const [tab, setTab] = useState("nhansu");
+    const dn = window.useDoanhNghiepData();
+    return h("div", { className: "min-h-screen flex flex-col" },
+      h(Header, { tab, setTab }),
+      h("main", { className: "flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6" },
+        tab === "nhansu"
+          ? h(NhanSuView, { dnData: dn.data })
+          : h(DoanhNghiepView, {
+              dnData: dn.data,
+              dnLoading: dn.loading,
+              dnError: dn.error,
+            })
+      ),
+      h("footer", { className: "border-t border-slate-200 bg-white" },
+        h("div", { className: "max-w-7xl mx-auto px-3 sm:px-6 py-3 text-[10px] sm:text-xs text-slate-500 flex items-center justify-between" },
+          h("span", null, "© ", new Date().getFullYear(), " ", APP_NAME),
+          h("span", null, "Dữ liệu: Google Sheets")
+        )
+      )
+    );
+  }
+
+  // Gắn global để index.html gọi
+  window.App = App;
+
+  console.log("[components.js] ✅ Đã nạp components");
+})();
