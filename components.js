@@ -168,7 +168,7 @@
   }
 
   // ============================================================
-  // 3. MODAL CHI TIẾT CÁN BỘ
+  // 3. MODAL CHI TIẾT CÁN BỘ (Danh sách doanh nghiệp)
   // ============================================================
   function CanBoDetail({ tenCanBo, data, onClose }) {
     const dsQuanLy = useMemo(() => {
@@ -234,6 +234,81 @@
   }
 
   // ============================================================
+  // 3b. MODAL TÙY CHỌN HÀNH ĐỘNG KHI BẤM VÀO THẺ (CARD)
+  // ============================================================
+  function CanBoActionModal({ nhanSu, onClose, onViewDN }) {
+    if (!nhanSu) return null;
+
+    const handleCall = (phone) => {
+      if (phone) {
+        const cleanPhone = String(phone).replace(/[\s\-\.]/g, "");
+        window.location.href = `tel:${cleanPhone}`;
+      } else {
+        alert("Cán bộ này chưa có số điện thoại di động!");
+      }
+      onClose();
+    };
+
+    // Đóng khi nhấn phím Esc
+    useEffect(() => {
+      const onKey = (e) => { if (e.key === "Escape") onClose(); };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, [onClose]);
+
+    return h("div", {
+      className: "fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn",
+      onClick: onClose,
+    },
+      h("div", {
+        className: "bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-pop overflow-hidden animate-slideUp",
+        onClick: (e) => e.stopPropagation(),
+      },
+        h("div", { className: "px-5 py-4 flex flex-col items-center border-b border-slate-100 relative" },
+          h("button", {
+            onClick: onClose,
+            className: "absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center text-lg",
+          }, "×"),
+          h(Avatar, { src: nhanSu.avatar, name: nhanSu.hoTen, size: 64 }),
+          h("h3", { className: "text-lg font-bold text-slate-800 mt-3 text-center" }, nhanSu.hoTen || "—"),
+          h("p", { className: "text-sm text-slate-500 text-center" }, nhanSu.chucVu || "—"),
+          nhanSu.donVi ? h("p", { className: "text-xs text-slate-400 text-center mt-0.5" }, nhanSu.donVi) : null
+        ),
+        h("div", { className: "p-4 space-y-3" },
+          // Nút Gọi điện
+          h("button", {
+            onClick: () => handleCall(nhanSu.soDienThoai),
+            className: "w-full flex items-center justify-center gap-2 py-3 bg-brand-50 text-brand-700 font-semibold rounded-xl hover:bg-brand-100 transition",
+          }, 
+            h("span", { className: "text-lg" }, "📞"), 
+            nhanSu.soDienThoai 
+              ? `Gọi: ${nhanSu.soDienThoai}` 
+              : "Chưa có số điện thoại"
+          ),
+
+          // Nút Xem doanh nghiệp
+          h("button", {
+            onClick: () => {
+              onClose();
+              onViewDN(nhanSu.hoTen);
+            },
+            className: "w-full flex items-center justify-center gap-2 py-3 bg-slate-50 text-slate-700 font-semibold rounded-xl hover:bg-slate-100 transition border border-slate-200",
+          }, 
+            h("span", { className: "text-lg" }, "🏢"), 
+            "Xem doanh nghiệp quản lý"
+          ),
+
+          // Nút Hủy
+          h("button", {
+            onClick: onClose,
+            className: "w-full py-2.5 text-sm text-slate-500 hover:text-slate-700 font-medium",
+          }, "Hủy bỏ")
+        )
+      )
+    );
+  }
+
+  // ============================================================
   // 4. NHÂN SỰ (CARD & TABLE)
   // ============================================================
   function NhanSuCard({ n, onClick }) {
@@ -288,16 +363,15 @@
                 h("td", { className: "px-3 sm:px-4 py-3" },
                   h("div", { className: "flex items-center gap-2 sm:gap-3" },
                     h(Avatar, { src: n.avatar, name: n.hoTen, size: 32 }),
-                    // SỬA TẠI ĐÂY: Thêm type="button" và ngăn chặn sự kiện lan truyền
                     onCanBoClick
-                      ? h("button", { 
+                      ? h("button", {
                           type: "button",
-                          onClick: (e) => { 
-                            e.preventDefault(); 
-                            e.stopPropagation(); 
-                            onCanBoClick(n.hoTen); 
-                          }, 
-                          className: "font-medium text-brand-700 hover:underline text-left line-clamp-2" 
+                          onClick: (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onCanBoClick(n.hoTen);
+                          },
+                          className: "font-medium text-brand-700 hover:underline text-left line-clamp-2",
                         }, n.hoTen || "—")
                       : h("span", { className: "font-medium text-slate-800 line-clamp-2" }, n.hoTen || "—"),
                     isBday ? h("span", null, "🎂") : null
@@ -323,6 +397,7 @@
     const [donViFilter, setDonViFilter] = useState("");
     const [viewMode, setViewMode] = useState("card");
     const [selectedCanBo, setSelectedCanBo] = useState(null);
+    const [actionCanBo, setActionCanBo] = useState(null);
 
     const danhSachDonVi = useMemo(() => [...new Set(data.map((n) => n.donVi).filter(Boolean))], [data]);
 
@@ -349,7 +424,7 @@
     if (loading) return h(TableSkeleton);
     if (error) return h(ErrorBox, { error });
 
-    // Render danh sách (Tách khỏi ternary để tránh lỗi ngoặc)
+    // Render danh sách
     let listUI = null;
     if (filtered.length === 0) {
       listUI = h("div", { className: "bg-white rounded-xl shadow-card ring-1 ring-slate-100 py-12 text-center" },
@@ -358,7 +433,11 @@
       );
     } else if (viewMode === "card") {
       listUI = h("div", { className: "grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3" },
-        filtered.map((n) => h(NhanSuCard, { key: n.id || n.hoTen, n, onClick: () => setSelectedCanBo(n.hoTen) }))
+        filtered.map((n) => h(NhanSuCard, {
+          key: n.id || n.hoTen,
+          n,
+          onClick: () => setActionCanBo(n),
+        }))
       );
     } else {
       listUI = h(NhanSuTable, { data: filtered, onCanBoClick: setSelectedCanBo });
@@ -408,7 +487,19 @@
 
       listUI,
 
-      selectedCanBo ? h(CanBoDetail, { tenCanBo: selectedCanBo, data: dnData, onClose: () => setSelectedCanBo(null) }) : null
+      // Modal xem doanh nghiệp (dùng chung cho cả Table và Card)
+      selectedCanBo ? h(CanBoDetail, {
+        tenCanBo: selectedCanBo,
+        data: dnData,
+        onClose: () => setSelectedCanBo(null),
+      }) : null,
+
+      // Modal hành động khi bấm Thẻ Card
+      actionCanBo ? h(CanBoActionModal, {
+        nhanSu: actionCanBo,
+        onClose: () => setActionCanBo(null),
+        onViewDN: (ten) => setSelectedCanBo(ten),
+      }) : null
     );
   }
 
@@ -513,7 +604,11 @@
                   h("td", { className: "px-3 sm:px-4 py-3 font-medium text-slate-800 min-w-[150px]" }, d["Tên NNT"] || "—"),
                   h("td", { className: "px-3 sm:px-4 py-3 whitespace-nowrap" },
                     d["Tên cán bộ quản lý"]
-                      ? h("button", { onClick: () => setSelectedCanBo(d["Tên cán bộ quản lý"]), className: "text-brand-700 hover:underline font-medium" }, d["Tên cán bộ quản lý"])
+                      ? h("button", {
+                          type: "button",
+                          onClick: () => setSelectedCanBo(d["Tên cán bộ quản lý"]),
+                          className: "text-brand-700 hover:underline font-medium",
+                        }, d["Tên cán bộ quản lý"])
                       : "—"
                   )
                 )
@@ -551,7 +646,11 @@
         )
       ),
       tableUI,
-      selectedCanBo ? h(CanBoDetail, { tenCanBo: selectedCanBo, data, onClose: () => setSelectedCanBo(null) }) : null
+      selectedCanBo ? h(CanBoDetail, {
+        tenCanBo: selectedCanBo,
+        data,
+        onClose: () => setSelectedCanBo(null),
+      }) : null
     );
   }
 
@@ -596,7 +695,7 @@
   function App() {
     const [tab, setTab] = useState("nhansu");
     const dn = window.useDoanhNghiepData();
-    
+
     return h("div", { className: "min-h-screen flex flex-col" },
       h(Header, { tab, setTab }),
       h("main", { className: "flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6" },
